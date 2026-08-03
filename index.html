@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cellar Manager">
+<meta name="theme-color" content="#1B1413">
+<title>Cellar Manager</title>
+<link rel="manifest" href='data:application/json,{"name":"Cellar Manager","short_name":"Cellar","display":"standalone","background_color":"%231B1413","theme_color":"%231B1413"}'>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --bg:#1B1413; --card:#271C1B; --ink:#150F0E; --line:#3A2A28;
+    --tx:#EFE7DB; --mut:#93826F; --wine:#7C2A32; --gold:#D9B45E; --green:#8BA96E;
+    --serif:'Georgia','Times New Roman',serif; --mono:'SFMono-Regular','Menlo',monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:#0F0B0A;color:var(--tx);
+    font-family:system-ui,-apple-system,sans-serif;height:100%}
+  #app{position:relative;display:flex;flex-direction:column;height:100vh;height:100dvh;background:var(--bg);overflow:hidden;max-width:440px;margin:0 auto}
+  .scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .scroll::-webkit-scrollbar{display:none}
+  .scroll{scrollbar-width:none}
+  .safe-top{padding-top:calc(16px + env(safe-area-inset-top))}
+  input,select,button,textarea{font-family:inherit;font-size:16px}
+  input::placeholder,textarea::placeholder{color:#6f6154}
+  h1{font-family:var(--serif);font-weight:400;margin:0}
+  .eyebrow{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--mut)}
+  .rule{height:1px;background:linear-gradient(90deg,var(--gold),transparent);margin:14px 0 16px}
+  .searchbar{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px}
+  .searchbar input{flex:1;background:none;border:none;outline:none;color:var(--tx)}
+  .fbtn{width:100%;display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 15px;color:var(--tx);cursor:pointer;font-size:15px}
+  .fpanel{border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:8px;background:rgba(0,0,0,.15)}
+  .flabel{font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mut);margin:0 0 6px}
+  .sel{position:relative}
+  .sel select{width:100%;-webkit-appearance:none;appearance:none;background:var(--ink);border:1px solid var(--line);border-radius:12px;padding:12px 34px 12px 13px;color:var(--tx);outline:none}
+  .sel::after{content:"▾";position:absolute;right:13px;top:50%;transform:translateY(-50%);color:var(--mut);pointer-events:none;font-size:12px}
+  .card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-top:10px;cursor:pointer}
+  .tag{font-size:12px;letter-spacing:2px;color:var(--mut)}
+  .yr{font-family:var(--serif);font-size:22px;color:var(--gold)}
+  .vname{font-family:var(--serif);font-size:21px;margin-top:8px;line-height:1.1}
+  .muted{color:var(--mut)}
+  .mono{font-family:var(--mono)}
+  .divider{height:1px;background:var(--line);margin:12px 0}
+  .overlay{position:absolute;inset:0;background:var(--bg);z-index:30;display:flex;flex-direction:column}
+  .xbtn{background:var(--card);border:1px solid var(--line);border-radius:999px;width:36px;height:36px;display:grid;place-items:center;cursor:pointer;color:var(--tx);font-size:18px}
+  .sheet{position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:40;display:flex;align-items:flex-end}
+  .sheetbox{background:var(--bg);width:100%;max-height:92%;border-top-left-radius:20px;border-top-right-radius:20px;border:1px solid var(--line);display:flex;flex-direction:column}
+  .field{width:100%;background:var(--ink);border:1px solid var(--line);border-radius:10px;padding:11px 12px;color:var(--tx);outline:none;margin-bottom:2px}
+  .lab{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--mut);margin:12px 0 5px;display:block}
+  .primary{width:100%;background:var(--gold);color:#1B1413;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:600;cursor:pointer}
+  .ghost{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:10px;padding:8px 14px;font-size:13px;cursor:pointer}
+  .fab{position:absolute;right:16px;bottom:calc(20px + env(safe-area-inset-bottom));background:var(--gold);color:#1B1413;border:none;border-radius:999px;padding:13px 19px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+  .status{font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px}
+  .dot{width:7px;height:7px;border-radius:7px;display:inline-block}
+  .cellarmap{width:100%;height:auto;max-height:42vh;display:block;margin:0 auto}
+  .navrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .modrow{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px}
+  .colrow{display:flex;gap:8px;align-items:center;margin-top:6px}
+  .colrow .field{margin-bottom:0}
+  .errtext{color:var(--wine);font-size:12.5px;margin-top:8px;line-height:1.5}
+  .oktext{color:var(--green);font-size:12.5px;margin-top:8px;line-height:1.5}
+  .depthbar{flex:1;text-align:center;padding:10px 0;font-size:13px;border-radius:8px;border:1px solid var(--gold);background:rgba(217,180,94,.12);color:var(--gold);font-weight:600;cursor:pointer}
+  .depthbar.taken{border-color:var(--line);background:transparent;color:var(--mut);font-weight:400;cursor:default}
+  .shapebtn{flex:1;padding:14px 0;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--mut);font-size:22px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .shapebtn span{font-size:11px;letter-spacing:.5px}
+  .shapebtn.on{border-color:var(--gold);color:var(--gold);background:rgba(217,180,94,.12)}
+  .modechoice{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+  .modechoice button{width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;color:var(--tx);cursor:pointer}
+  .modechoice button .t{font-family:var(--serif);font-size:17px}
+  .modechoice button .d{color:var(--mut);font-size:12.5px;margin-top:3px}
+  @media(min-width:760px){
+    #app{max-width:1100px}
+    .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:start}
+    .cardgrid .card{margin-top:0}
+    .locrow{display:flex;gap:24px;align-items:flex-start}
+    .locrow>div{flex:1;min-width:0}
+    .fab{right:max(16px,calc(50% - 534px))}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+var SUPABASE_URL="https://okydazkanmnxrgxsfsdm.supabase.co";
+var SUPABASE_KEY="sb_publishable_LyIyKiGTwmjSrj2gb9tvkw_t5My95dC";
+var sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+var app=document.getElementById("app");
+
+/* ---------------- util ---------------- */
+function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function brl(v){ if(v==null||v==="") return ""; var n=Number(v); return isNaN(n)?"":"R$ "+Math.round(n).toLocaleString("pt-BR"); }
+function toNum(v){ if(v==null) return null; var n=parseInt(String(v).replace(/[^\d]/g,""),10); return isNaN(n)?null:n; }
+function janelaParse(s){ var m=String(s||"").match(/(\d{4})\D+(\d{4})/); return m?[+m[1],+m[2]]:null; }
+function janelaStatus(w){
+  var r=janelaParse(w.janela); if(!r) return null;
+  var YEAR=new Date().getFullYear(), a=r[0], b=r[1];
+  if(YEAR<a) return {label:"Guarda",color:"var(--gold)"};
+  if(YEAR>b) return {label:"Beba já",color:"var(--wine)"};
+  return {label:"No ponto",color:"var(--green)"};
+}
+function parseCSV(text){
+  var rows=[],row=[],cur="",q=false;
+  for(var i=0;i<text.length;i++){var ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+    else{ if(ch==='"')q=true; else if(ch===','){row.push(cur);cur="";} else if(ch==='\n'){row.push(cur);rows.push(row);row=[];cur="";} else if(ch!=='\r')cur+=ch; }
+  }
+  if(cur.length||row.length){row.push(cur);rows.push(row);}
+  return rows;
+}
+function parseWineCSV(text){
+  var rows=parseCSV(text);
+  var h=-1;
+  for(var i=0;i<rows.length;i++){ if(rows[i].some(function(c){return String(c).trim().toUpperCase().indexOf("VINHO")===0;})){h=i;break;} }
+  if(h<0) return [];
+  var head=rows[h].map(function(c){return String(c).trim().toUpperCase();});
+  function idx(name){ for(var j=0;j<head.length;j++){ if(head[j].indexOf(name)===0) return j; } return -1; }
+  var iT=idx("TIPO"),iV=idx("VINHO"),iR=idx("REGI"),iS=idx("SAFRA"),iU=idx("UVAS"),iVal=idx("VALOR"),iJ=idx("JANELA");
+  var out=[];
+  for(var r=h+1;r<rows.length;r++){
+    var row=rows[r]; if(!row) continue;
+    var vinho=(row[iV]||"").trim();
+    if(!vinho) continue;
+    out.push({tipo:(row[iT]||"").trim()||"Tinto",vinho:vinho,regiao:(row[iR]||"").trim(),safra:(row[iS]||"").trim(),uvas:(row[iU]||"").trim(),valor:toNum(row[iVal]),janela:(row[iJ]||"").trim()});
+  }
+  return out;
+}
+var TIPO_COLOR={Tinto:"#7C2A32",Branco:"#C9B36B",Espumante:"#CBB994",Fortificado:"#5E2733","Rosé":"#B05B63"};
+var TIPOS=["Tinto","Branco","Espumante","Fortificado","Rosé"];
+var DEPTH_LABELS=["Frente","Meio","Fundo"];
+function depthLabel(n,total){ if(total<=3) return DEPTH_LABELS[n-1]||("P"+n); return "P"+n; }
+function poolDepthOf(m){ return (m.columns&&m.columns.length)?Number(m.columns[0].depth):1; }
+
+/* ---------------- estado ---------------- */
+var S={
+  view:"loading", session:null,
+  cellar:null, walls:[], builderWallId:null,
+  modules:[], modulesById:{}, wines:[],
+  q:"", f:defFilters(), fOpen:false,
+  locate:null, sheet:null, draft:null, picker:null,
+  authMode:"login", authEmail:"", authPass:"", authErr:"", authMsg:"", authBusy:false,
+  builder:freshBuilderDraft(),
+  wallTransform:null,
+  importUrl:"", importText:"", importPreview:null, importErr:"", importBusy:false
+};
+function defFilters(){ return {tipo:"Todos",ordenar:"adega",vmin:0,vmax:1e9}; }
+function freshBuilderDraft(){ return {name:"",shape:"rect",rows:6,columns:[{width:1,depth:1}],poolCount:8,poolDepth:1}; }
+function wallModules(wallId){ return S.modules.filter(function(m){return m.wall_id===wallId;}); }
+
+/* ---------------- dados (Supabase) ---------------- */
+async function loadCellar(){
+  var r=await sb.from("cellars").select("*").limit(1);
+  S.cellar=(r.data&&r.data[0])||null;
+}
+async function loadWalls(){
+  S.walls=[];
+  if(!S.cellar) return;
+  var r=await sb.from("walls").select("*").eq("cellar_id",S.cellar.id).order("position");
+  S.walls=r.data||[];
+  if((!S.builderWallId||!S.walls.some(function(w){return w.id===S.builderWallId;}))&&S.walls.length) S.builderWallId=S.walls[0].id;
+}
+async function loadModules(){
+  S.modules=[]; S.modulesById={};
+  if(!S.walls.length) return;
+  var wallIds=S.walls.map(function(w){return w.id;});
+  var r=await sb.from("modules").select("*").in("wall_id",wallIds).order("created_at");
+  var mods=r.data||[];
+  if(mods.length){
+    var ids=mods.map(function(m){return m.id;});
+    var rc=await sb.from("module_columns").select("*").in("module_id",ids);
+    var byMod={};
+    (rc.data||[]).forEach(function(c){ (byMod[c.module_id]=byMod[c.module_id]||[]).push(c); });
+    mods.forEach(function(m){ m.columns=(byMod[m.id]||[]).sort(function(a,b){return a.col_index-b.col_index;}); });
+  }
+  S.modules=mods;
+  mods.forEach(function(m){ S.modulesById[m.id]=m; });
+}
+async function loadWines(){
+  S.wines=[];
+  if(!S.cellar) return;
+  var r=await sb.from("wines").select("*").eq("cellar_id",S.cellar.id).order("created_at");
+  S.wines=r.data||[];
+}
+async function afterLogin(){
+  await loadCellar();
+  await loadWalls();
+  await loadModules();
+  await loadWines();
+  S.view = S.cellar ? "main" : "builder";
+  render();
+}
+
+/* ---------------- filtros / ordenação ---------------- */
+function positionLabel(w){
+  if(!w.module_id) return "Sem posição";
+  var m=S.modulesById[w.module_id]; if(!m) return "—";
+  if(m.shape!=="rect"){
+    var lbl2=m.name+" · Vaga "+w.col;
+    if(w.depth && poolDepthOf(m)>1) lbl2+="P"+w.depth;
+    return lbl2;
+  }
+  var lbl=m.name+" · L"+w.row+"C"+w.col;
+  if(w.depth) lbl+="P"+w.depth;
+  return lbl;
+}
+function passFilters(w,q,f){
+  if(f.tipo!=="Todos" && w.tipo!==f.tipo) return false;
+  var val=w.valor||0; if(val<f.vmin||val>f.vmax) return false;
+  if(q.trim()){
+    var s=q.toLowerCase().trim();
+    var hay=[w.tipo,w.vinho,w.regiao,w.safra,w.uvas,w.valor,brl(w.valor),w.janela,positionLabel(w)].join(" ").toLowerCase();
+    if(hay.indexOf(s)<0) return false;
+  }
+  return true;
+}
+function moduleOrderKey(m){ return m?(m.floor_y*1000+m.floor_x):1e9; }
+function sortWines(a,ord){
+  a=a.slice();
+  if(ord==="nome") a.sort(function(x,y){return x.vinho.localeCompare(y.vinho);});
+  else if(ord==="safra_nova") a.sort(function(x,y){return (parseInt(y.safra)||0)-(parseInt(x.safra)||0);});
+  else if(ord==="safra_velha") a.sort(function(x,y){return (parseInt(x.safra)||0)-(parseInt(y.safra)||0);});
+  else if(ord==="valor_maior") a.sort(function(x,y){return (y.valor||0)-(x.valor||0);});
+  else if(ord==="valor_menor") a.sort(function(x,y){return (x.valor||0)-(y.valor||0);});
+  else a.sort(function(x,y){
+    var kx=x.module_id?moduleOrderKey(S.modulesById[x.module_id]):1e9;
+    var ky=y.module_id?moduleOrderKey(S.modulesById[y.module_id]):1e9;
+    if(kx!==ky) return kx-ky;
+    if((x.row||0)!==(y.row||0)) return (x.row||0)-(y.row||0);
+    if((x.col||0)!==(y.col||0)) return (x.col||0)-(y.col||0);
+    return (x.depth||0)-(y.depth||0);
+  });
+  return a;
+}
+function occupiedSet(excludeId){
+  var s={};
+  S.wines.forEach(function(w){ if(w.module_id && w.id!==excludeId){ s[w.module_id+"|"+w.row+"|"+w.col+"|"+(w.depth||1)]=1; } });
+  return s;
+}
+
+/* ---------------- SVG: parede e grade do módulo ---------------- */
+function wallSVG(modules,highlightId,tap,drag){
+  var W=300,H=260,pad=16;
+  if(!modules.length){
+    return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" class="cellarmap"><text x="'+(W/2)+'" y="'+(H/2)+'" text-anchor="middle" fill="#93826F" font-size="13">Nenhum módulo ainda</text></svg>';
+  }
+  var minX=Math.min.apply(null,modules.map(function(m){return m.floor_x;}));
+  var minY=Math.min.apply(null,modules.map(function(m){return m.floor_y;}));
+  var maxX=Math.max.apply(null,modules.map(function(m){return m.floor_x+m.floor_w;}));
+  var maxY=Math.max.apply(null,modules.map(function(m){return m.floor_y+m.floor_h;}));
+  var spanX=Math.max(maxX-minX,0.001), spanY=Math.max(maxY-minY,0.001);
+  var scale=Math.min((W-2*pad)/spanX,(H-2*pad)/spanY);
+  var offX=pad+((W-2*pad)-spanX*scale)/2, offY=pad+((H-2*pad)-spanY*scale)/2;
+  if(drag) S.wallTransform={scale:scale,offX:offX,offY:offY,minX:minX,minY:minY,W:W,H:H};
+  function px(x){return offX+(x-minX)*scale;}
+  function py(y){return offY+(y-minY)*scale;}
+  var s='<svg viewBox="0 0 '+W+' '+H+'" width="100%" class="cellarmap">';
+  modules.forEach(function(m){
+    var on=(m.id===highlightId);
+    var x=px(m.floor_x), y=py(m.floor_y), w=m.floor_w*scale, h=m.floor_h*scale;
+    var fill=on?"rgba(217,180,94,.18)":"#271C1B", stroke=on?"#D9B45E":"#3A2A28", sw=on?1.6:.8;
+    var attrs=(tap?' data-pickmod="'+m.id+'"':"")+(drag?' data-dragmod="'+m.id+'"':"")+((tap||drag)?' style="cursor:pointer"':"");
+    if(m.shape==="circle"){
+      s+='<ellipse cx="'+(x+w/2)+'" cy="'+(y+h/2)+'" rx="'+(w/2)+'" ry="'+(h/2)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+attrs+'/>';
+    } else if(m.shape==="triangle"){
+      var p1x=x+w/2,p1y=y,p2x=x+w,p2y=y+h,p3x=x,p3y=y+h;
+      s+='<polygon points="'+p1x+','+p1y+' '+p2x+','+p2y+' '+p3x+','+p3y+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+attrs+'/>';
+    } else if(m.shape==="diamond"){
+      var dp1x=x+w/2,dp1y=y,dp2x=x+w,dp2y=y+h/2,dp3x=x+w/2,dp3y=y+h,dp4x=x,dp4y=y+h/2;
+      s+='<polygon points="'+dp1x+','+dp1y+' '+dp2x+','+dp2y+' '+dp3x+','+dp3y+' '+dp4x+','+dp4y+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+attrs+'/>';
+    } else {
+      s+='<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="5" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+attrs+'/>';
+    }
+    s+=moduleTextureSVG(m,x,y,w,h,stroke);
+    var lblY = m.shape==="triangle" ? (y+h-6) : (y+h+11);
+    if(Math.min(w,h)>30) s+='<rect x="'+(x+w/2-Math.min(w*0.9,esc(m.name).length*3.4+6)/2)+'" y="'+(lblY-8)+'" width="'+Math.min(w*0.9,esc(m.name).length*3.4+6)+'" height="11" fill="var(--bg)" opacity="0.72" style="pointer-events:none"/>';
+    s+='<text x="'+(x+w/2)+'" y="'+lblY+'" text-anchor="middle" font-size="'+(Math.min(w,h)>36?10:8)+'" font-family="monospace" fill="'+(on?"#D9B45E":"#93826F")+'" style="pointer-events:none">'+esc(m.name)+'</text>';
+  });
+  return s+'</svg>';
+}
+/* desenha a textura interna (grade ou vagas) de um módulo, em miniatura, dentro do seu contorno no piso */
+function moduleTextureSVG(m,x,y,w,h,stroke){
+  var s="";
+  if(m.shape==="rect"){
+    var cols=m.columns, rows=m.rows;
+    if(!cols.length) return s;
+    var totW=cols.reduce(function(a,c){return a+Number(c.width);},0);
+    var cx=x;
+    for(var ci=0;ci<cols.length-1;ci++){ cx+=w*(Number(cols[ci].width)/totW); s+='<line x1="'+cx+'" y1="'+y+'" x2="'+cx+'" y2="'+(y+h)+'" stroke="'+stroke+'" stroke-width="0.5" opacity="0.65"/>'; }
+    for(var ri=1;ri<rows;ri++){ var ly=y+h*(ri/rows); s+='<line x1="'+x+'" y1="'+ly+'" x2="'+(x+w)+'" y2="'+ly+'" stroke="'+stroke+'" stroke-width="0.5" opacity="0.65"/>'; }
+  } else {
+    if(m.shape==="diamond"){
+      s+='<line x1="'+(x+w*0.08)+'" y1="'+(y+h*0.08)+'" x2="'+(x+w*0.92)+'" y2="'+(y+h*0.92)+'" stroke="'+stroke+'" stroke-width="0.7" opacity="0.55"/>';
+      s+='<line x1="'+(x+w*0.92)+'" y1="'+(y+h*0.08)+'" x2="'+(x+w*0.08)+'" y2="'+(y+h*0.92)+'" stroke="'+stroke+'" stroke-width="0.7" opacity="0.55"/>';
+    }
+    var pad=Math.min(w,h)*0.16;
+    var pts=poolDotPositions(m.shape,m.columns.length,w,h,pad);
+    var rDot=Math.max(1.3,Math.min(w,h)/(m.shape==="circle"?16:20));
+    pts.forEach(function(p){ s+='<circle cx="'+(x+p.x)+'" cy="'+(y+p.y)+'" r="'+rDot+'" fill="none" stroke="'+stroke+'" stroke-width="0.6" opacity="0.85"/>'; });
+  }
+  return s;
+}
+/* posições (x,y) das vagas de um módulo pool dentro de uma caixa W×H — círculo = anel(is), triângulo = pirâmide */
+function poolDotPositions(shape,count,W,H,pad){
+  var cx=W/2, cy=H/2, pts=[];
+  if(count<=0) return pts;
+  if(shape==="circle"){
+    if(count===1){ pts.push({x:cx,y:cy}); return pts; }
+    var maxR=Math.min(W,H)/2-pad;
+    var ring1=Math.min(count,10), ring2=count-ring1;
+    var r1=ring2>0?maxR*0.58:maxR*0.8, r2=maxR*0.95;
+    for(var i=0;i<ring1;i++){ var a=(Math.PI*2*i/ring1)-Math.PI/2; pts.push({x:cx+r1*Math.cos(a),y:cy+r1*Math.sin(a)}); }
+    for(var j=0;j<ring2;j++){ var a2=(Math.PI*2*j/ring2)-Math.PI/2; pts.push({x:cx+r2*Math.cos(a2),y:cy+r2*Math.sin(a2)}); }
+    return pts;
+  }
+  if(shape==="triangle"){
+    var rowsArr=[], remaining=count, rIdx=1;
+    while(remaining>0){ var take=Math.min(rIdx,remaining); rowsArr.push(take); remaining-=take; rIdx++; }
+    var nRows=rowsArr.length;
+    var top=pad, bottom=H-pad*0.6, usableH=Math.max(bottom-top,1);
+    var rowH=usableH/nRows;
+    rowsArr.forEach(function(n,ri){
+      var yy=top+ri*rowH+rowH/2;
+      var rowW=(W-2*pad)*((ri+1)/nRows);
+      var startX=cx-rowW/2;
+      for(var k=0;k<n;k++){ var xx=(n===1)?cx:startX+(k+0.5)*(rowW/n); pts.push({x:xx,y:yy}); }
+    });
+    return pts;
+  }
+  if(shape==="diamond"){
+    var peak=Math.max(1,Math.round(Math.sqrt(count)));
+    var seq=[]; for(var a=1;a<=peak;a++) seq.push(a); for(var b=peak-1;b>=1;b--) seq.push(b);
+    var rowsArr2=[], rem2=count;
+    for(var si=0; si<seq.length && rem2>0; si++){ var take2=Math.min(seq[si],rem2); rowsArr2.push(take2); rem2-=take2; }
+    if(rem2>0) rowsArr2.push(rem2);
+    var nRows2=rowsArr2.length;
+    var top2=pad, bottom2=H-pad, usableH2=Math.max(bottom2-top2,1);
+    var rowH2=usableH2/nRows2;
+    rowsArr2.forEach(function(n,ri){
+      var yy=top2+ri*rowH2+rowH2/2;
+      var t=(ri+0.5)/nRows2;
+      var widthFactor=Math.max(Math.sin(Math.PI*t),0.28);
+      var rowW=(W-2*pad)*widthFactor;
+      var startX=cx-rowW/2;
+      for(var k2=0;k2<n;k2++){ var xx=(n===1)?cx:startX+(k2+0.5)*(rowW/n); pts.push({x:xx,y:yy}); }
+    });
+    return pts;
+  }
+  return pts;
+}
+function moduleGridSVG(module,hRow,hCol,tap,excludeId){
+  var cols=module.columns, rows=module.rows, pool=(module.shape!=="rect");
+  if(!cols.length) return '<div class="muted" style="text-align:center;padding:20px">Este módulo não tem vagas.</div>';
+  var occ=occupiedSet(excludeId);
+  if(pool){
+    var W=300,H=220,pad=30;
+    var count=cols.length, d=Number(cols[0].depth);
+    var pts=poolDotPositions(module.shape,count,W,H,pad);
+    var rDot=module.shape==="circle"?15:14;
+    var s='<svg viewBox="0 0 '+W+' '+H+'" width="100%">';
+    pts.forEach(function(p,i){
+      var colNum=i+1, on=(hCol===colNum);
+      var full=true; for(var dd=1;dd<=d;dd++){ if(!occ[module.id+"|1|"+colNum+"|"+dd]){ full=false; break; } }
+      var clickable=tap && !full;
+      s+='<circle '+(clickable?'data-pickcell="1,'+colNum+'"':'')+' cx="'+p.x+'" cy="'+p.y+'" r="'+rDot+'" fill="'+(on?"rgba(217,180,94,.22)":(full?"#1c1512":"#150F0E"))+'" stroke="'+(on?"#D9B45E":"#3A2A28")+'" stroke-width="'+(on?1.6:1)+'" opacity="'+(full&&!on?".45":"1")+'"'+(clickable?' style="cursor:pointer"':'')+'/>';
+      s+='<text x="'+p.x+'" y="'+(p.y+3)+'" text-anchor="middle" font-size="8" font-family="monospace" fill="'+(on?"#D9B45E":"#93826F")+'" style="pointer-events:none">'+colNum+'</text>';
+    });
+    return s+'</svg>';
+  }
+  var W=320,H=200,padL=26,padT=14,padR=10,padB=10,gap=4;
+  var totW=cols.reduce(function(a,c){return a+Number(c.width);},0);
+  var usableW=W-padL-padR-gap*(cols.length-1);
+  var ch=(H-padT-padB-gap*(Math.max(rows,1)-1))/Math.max(rows,1);
+  var s='<svg viewBox="0 0 '+W+' '+H+'" width="100%">';
+  for(var l=1;l<=rows;l++) s+='<text x="14" y="'+(padT+(l-1)*(ch+gap)+ch/2+3)+'" text-anchor="middle" font-size="9" fill="#93826F" font-family="monospace">L'+l+'</text>';
+  var x=padL;
+  cols.forEach(function(col,ci){
+    var cw=usableW*(Number(col.width)/totW);
+    var lateral=(Number(col.depth)<=1);
+    var label="C"+(ci+1)+(lateral?"·lat":"");
+    s+='<text x="'+(x+cw/2)+'" y="9" text-anchor="middle" font-size="9" fill="'+(lateral?"#D9B45E":"#93826F")+'" font-family="monospace">'+label+'</text>';
+    for(var l=1;l<=rows;l++){
+      var y=padT+(l-1)*(ch+gap);
+      var on=(l===hRow && (ci+1)===hCol);
+      var full=true; for(var d=1;d<=Number(col.depth);d++){ if(!occ[module.id+"|"+l+"|"+(ci+1)+"|"+d]){ full=false; break; } }
+      var clickable=tap && !full;
+      s+='<rect '+(clickable?'data-pickcell="'+l+','+(ci+1)+'"':'')+' x="'+x+'" y="'+y+'" width="'+cw+'" height="'+ch+'" rx="3" fill="'+(on?"rgba(217,180,94,.18)":(full?"#1c1512":(lateral?"rgba(217,180,94,.05)":"#150F0E")))+'" stroke="'+(on?"#D9B45E":"#3A2A28")+'" stroke-width="'+(on?1.4:.5)+'" opacity="'+(full&&!on?".45":"1")+'"'+(clickable?' style="cursor:pointer"':'')+(lateral&&!on?' stroke-dasharray="3 3"':'')+'/>';
+    }
+    x+=cw+gap;
+  });
+  return s+'</svg>';
+}
+
+/* ---------------- render raiz ---------------- */
+function render(){
+  var body="";
+  if(S.view==="loading") body='<div class="safe-top" style="padding:40px 20px;text-align:center;color:var(--mut)">Carregando…</div>';
+  else if(S.view==="auth") body=authScreen();
+  else if(S.view==="builder") body=builderScreen();
+  else if(S.view==="import") body=importScreen();
+  else body=mainScreen();
+  var fab=(S.view==="main")?'<button class="fab" data-add="1">＋ Adicionar</button>':"";
+  var overlays="";
+  if(S.view==="main") overlays=(S.locate?detailOverlay():"")+(S.sheet?editSheet():"")+(S.picker?pickerOverlay():"");
+  app.innerHTML='<div class="scroll" id="scroll">'+body+'</div>'+fab+overlays;
+  wire();
+}
+
+/* ---------------- auth ---------------- */
+function authScreen(){
+  var h='<div class="safe-top" style="padding:calc(28px + env(safe-area-inset-top)) 22px 20px">';
+  h+='<div style="text-align:center;margin-bottom:20px"><h1 style="font-size:30px">Cellar Manager</h1><div class="eyebrow" style="margin-top:4px">Gestão de adega personalizável</div></div>';
+  h+='<div class="rule"></div>';
+  h+='<div style="display:flex;gap:8px;margin-bottom:14px">';
+  h+='<button class="ghost" data-authmode="login" style="flex:1;'+(S.authMode==="login"?"border-color:var(--gold);color:var(--gold)":"")+'">Entrar</button>';
+  h+='<button class="ghost" data-authmode="signup" style="flex:1;'+(S.authMode==="signup"?"border-color:var(--gold);color:var(--gold)":"")+'">Criar conta</button>';
+  h+='</div>';
+  h+='<label class="lab">E-mail</label><input class="field" id="a_email" type="email" value="'+esc(S.authEmail)+'" placeholder="voce@email.com">';
+  h+='<label class="lab">Senha</label><input class="field" id="a_pass" type="password" value="'+esc(S.authPass)+'" placeholder="••••••••">';
+  h+='<button class="primary" data-authsubmit="1" style="margin-top:16px">'+(S.authBusy?"Aguarde…":(S.authMode==="login"?"Entrar":"Criar conta"))+'</button>';
+  if(S.authErr) h+='<div class="errtext">'+esc(S.authErr)+'</div>';
+  if(S.authMsg) h+='<div class="oktext">'+esc(S.authMsg)+'</div>';
+  return h+'</div>';
+}
+
+/* ---------------- builder (configurar adega) ---------------- */
+function builderScreen(){
+  var h='<div class="safe-top" style="padding:calc(24px + env(safe-area-inset-top)) 18px 16px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="eyebrow" style="color:var(--gold)">Configuração</div><h1 style="font-size:28px;margin-top:2px">Sua adega</h1></div>'+(S.cellar?'<button class="ghost" data-nav="main">‹ App</button>':'')+'</div>';
+  h+='<div class="rule"></div>';
+  if(!S.cellar){
+    h+='<label class="lab">Nome da adega</label><input class="field" id="b_cellarname" placeholder="Adega do João">';
+    h+='<div class="muted" style="font-size:13.5px;margin-top:14px">Como é sua adega?</div>';
+    h+='<div class="modechoice">';
+    h+='<button data-mkcellar="ambiente"><div class="t">Ambiente</div><div class="d">Uma sala com várias paredes — você organiza os módulos parede por parede.</div></button>';
+    h+='<button data-mkcellar="parede"><div class="t">Parede única</div><div class="d">Só uma parede ou estante — vai direto pro construtor de módulos.</div></button>';
+    h+='<button data-mkcellar="refrigerador"><div class="t">Refrigerador</div><div class="d">Atalho rápido: já cria um módulo retangular simples pra preencher.</div></button>';
+    h+='</div>';
+    return h+'</div>';
+  }
+  h+='<div class="eyebrow" style="margin-top:6px">Paredes</div>';
+  h+='<div class="navrow">';
+  S.walls.forEach(function(w){ h+='<button class="ghost" data-wall="'+w.id+'" style="'+(w.id===S.builderWallId?"border-color:var(--gold);color:var(--gold)":"")+'">'+esc(w.name)+'</button>'; });
+  h+='<button class="ghost" data-addwall="1">+ Parede</button>';
+  h+='</div>';
+  var wallMods=wallModules(S.builderWallId);
+  h+='<div class="eyebrow" style="margin-top:16px">Piso desta parede — arraste os módulos</div>';
+  h+='<div id="wallcanvas">'+wallSVG(wallMods,null,false,true)+'</div>';
+  if(wallMods.length){
+    h+='<div class="eyebrow" style="margin-top:16px">Módulos <span class="muted" style="text-transform:none;letter-spacing:0;font-size:11px">— arraste no piso acima pra posicionar, ajuste L/A pra afinar a proporção</span></div>';
+    wallMods.forEach(function(m){
+      var shapeIcon=m.shape==="circle"?"●":(m.shape==="triangle"?"▲":"▭");
+      var info=m.shape==="rect" ? (m.rows+" linhas · "+m.columns.length+" colunas") : (m.columns.length+" vagas · prof. "+poolDepthOf(m));
+      h+='<div class="modrow"><div><div style="font-family:var(--serif);font-size:16px">'+shapeIcon+' '+esc(m.name)+'</div><div class="muted mono" style="font-size:11.5px">'+info+'</div></div>';
+      h+='<div style="display:flex;gap:6px;align-items:center">';
+      h+='<input class="field" style="width:48px;padding:6px 7px;font-size:12px;margin-bottom:0" data-modw="'+m.id+'" value="'+m.floor_w+'" inputmode="decimal" title="Largura">';
+      h+='<input class="field" style="width:48px;padding:6px 7px;font-size:12px;margin-bottom:0" data-modh="'+m.id+'" value="'+m.floor_h+'" inputmode="decimal" title="Altura">';
+      h+='<button class="ghost" data-delmod="'+m.id+'" style="color:#D98A8A;border-color:var(--wine)">Excluir</button>';
+      h+='</div></div>';
+    });
+  }
+  h+='<div class="divider" style="margin-top:18px"></div>';
+  h+='<div class="eyebrow">Adicionar módulo nesta parede</div>';
+  var bd=S.builder;
+  h+='<label class="lab">Nome do módulo</label><input class="field" id="m_name" value="'+esc(bd.name)+'" placeholder="Módulo A1">';
+  h+='<label class="lab">Forma</label><div style="display:flex;gap:8px">';
+  [["rect","▭","Retângulo"],["triangle","▲","Triângulo"],["circle","●","Círculo"],["diamond","◆","Losango"]].forEach(function(s){
+    h+='<button class="shapebtn'+(bd.shape===s[0]?" on":"")+'" data-shape="'+s[0]+'">'+s[1]+'<span>'+s[2]+'</span></button>';
+  });
+  h+='</div>';
+  if(bd.shape==="rect"){
+    h+='<div style="display:flex;gap:8px;margin-top:10px"><div style="flex:1"><label class="lab">Linhas</label><input class="field" id="m_rows" inputmode="numeric" value="'+bd.rows+'"></div></div>';
+    h+='<div class="flabel" style="margin-top:14px">Colunas (largura relativa e profundidade)</div>';
+    bd.columns.forEach(function(c,i){
+      h+='<div class="colrow"><span class="mono muted" style="width:18px">'+(i+1)+'</span><input class="field" data-colw="'+i+'" inputmode="decimal" value="'+c.width+'" placeholder="largura"><input class="field" data-cold="'+i+'" inputmode="numeric" value="'+c.depth+'" placeholder="profundidade">'+(bd.columns.length>1?'<button class="ghost" data-rmcol="'+i+'" style="padding:8px 10px">✕</button>':'')+'</div>';
+    });
+    h+='<button class="ghost" data-addcol="1" style="width:100%;margin-top:8px;padding:10px">+ Coluna</button>';
+    h+='<div class="muted" style="font-size:11.5px;margin-top:8px;line-height:1.5">Profundidade 1 = sem empilhar (nicho lateral). Profundidade 3 cria as posições Frente/Meio/Fundo.</div>';
+  } else {
+    h+='<div style="display:flex;gap:8px;margin-top:10px"><div style="flex:1"><label class="lab">Quantas vagas</label><input class="field" id="m_poolcount" inputmode="numeric" value="'+bd.poolCount+'"></div><div style="flex:1"><label class="lab">Profundidade de cada vaga</label><input class="field" id="m_pooldepth" inputmode="numeric" value="'+bd.poolDepth+'"></div></div>';
+    h+='<div class="muted" style="font-size:11.5px;margin-top:8px;line-height:1.5">Módulos redondos/triangulares são um "pool" — uma lista de vagas numeradas, sem linha/coluna. Profundidade 1 = uma garrafa por vaga.</div>';
+  }
+  h+='<button class="primary" data-addmodule="1" style="margin-top:16px">Salvar módulo</button>';
+  h+='<button class="ghost" data-nav="main" style="width:100%;margin-top:18px;padding:12px">Ir para o app ›</button>';
+  return h+'</div>';
+}
+
+/* ---------------- importar CSV ---------------- */
+function importScreen(){
+  var h='<div class="safe-top" style="padding:calc(24px + env(safe-area-inset-top)) 18px 16px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="eyebrow" style="color:var(--gold)">Importar</div><h1 style="font-size:28px;margin-top:2px">Trazer vinhos</h1></div><button class="ghost" data-nav="main">‹ App</button></div>';
+  h+='<div class="rule"></div>';
+  h+='<div class="muted" style="font-size:13px;margin-bottom:10px">Cole o link de um CSV publicado (Google Sheets → Publicar na Web → CSV) ou cole o texto CSV direto. Colunas esperadas: TIPO, VINHO, REGIÃO, SAFRA, UVAS, VALOR, JANELA. Os vinhos entram sem posição — você define o local de cada um depois.</div>';
+  h+='<label class="lab">URL do CSV (opcional)</label><input class="field" id="i_url" value="'+esc(S.importUrl)+'" placeholder="https://docs.google.com/.../pub?output=csv">';
+  h+='<label class="lab">Ou cole o CSV aqui</label><textarea class="field" id="i_text" rows="6" placeholder="TIPO,VINHO,REGIAO,SAFRA,UVAS,VALOR,JANELA">'+esc(S.importText)+'</textarea>';
+  h+='<button class="ghost" data-importparse="1" style="width:100%;margin-top:10px;padding:12px">'+(S.importBusy?"Lendo…":"Pré-visualizar")+'</button>';
+  if(S.importErr) h+='<div class="errtext">'+esc(S.importErr)+'</div>';
+  if(S.importPreview){
+    h+='<div class="oktext">Encontrei '+S.importPreview.length+' vinho(s).</div>';
+    h+='<div class="cardgrid">';
+    S.importPreview.slice(0,5).forEach(function(w){ h+='<div class="card" style="cursor:default"><div class="vname" style="font-size:16px">'+esc(w.vinho)+'</div><div class="muted" style="font-size:12.5px">'+esc(w.regiao)+' · '+esc(w.safra)+'</div></div>'; });
+    h+='</div>';
+    if(S.importPreview.length>5) h+='<div class="muted" style="font-size:12px;margin-top:6px">e mais '+(S.importPreview.length-5)+'…</div>';
+    h+='<button class="primary" data-importconfirm="1" style="margin-top:14px">Importar '+S.importPreview.length+' vinho(s)</button>';
+  }
+  return h+'</div>';
+}
+
+/* ---------------- tela principal ---------------- */
+function stat(v,k){ return '<div><div style="font-family:var(--serif);font-size:22px;color:var(--gold)">'+v+'</div><div class="eyebrow" style="font-size:10.5px">'+k+'</div></div>'; }
+function mainScreen(){
+  var wines=S.wines;
+  var list=sortWines(wines.filter(function(w){return passFilters(w,S.q,S.f);}),S.f.ordenar);
+  var val=wines.reduce(function(s,w){return s+(w.valor||0);},0);
+  var h='<div class="safe-top" style="padding:calc(24px + env(safe-area-inset-top)) 18px 16px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><h1 style="font-size:30px">'+esc(S.cellar.name)+'</h1><div class="eyebrow" style="margin-top:2px">Cellar Manager</div></div></div>';
+  h+='<div class="navrow">';
+  h+='<button class="ghost" data-nav="builder">⚙ Adega</button>';
+  h+='<button class="ghost" data-nav="import">⇩ Importar</button>';
+  h+='<button class="ghost" data-logout="1" style="margin-left:auto">Sair</button>';
+  h+='</div>';
+  h+='<div style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap">'+stat(wines.length,"rótulos")+stat(S.modules.length,"módulos")+stat(brl(val),"em adega")+'</div>';
+  h+='<div class="searchbar" style="margin-top:16px"><span class="muted">🔎</span><input id="q" placeholder="Buscar em qualquer campo" value="'+esc(S.q)+'"></div>';
+  h+='<div style="margin-top:12px"><button class="fbtn" data-fopen="1"><span>⚙ Filtros</span><span style="color:'+(S.fOpen?'var(--gold)':'var(--mut)')+'">'+(S.fOpen?"▲":"▼")+'</span></button>'+filtersHTML(S.f,S.fOpen)+'</div>';
+  h+='<div class="divider" style="margin-top:16px"></div><div class="muted" style="font-size:13px"><span style="color:var(--gold);font-weight:600">'+list.length+'</span> rótulos</div>';
+  h+='<div class="cardgrid">'; list.forEach(function(w){ h+=wineCard(w); }); h+='</div>';
+  if(!list.length) h+='<div style="text-align:center;color:var(--mut);padding:30px">'+(wines.length?"Nada encontrado.":"Nenhum vinho ainda — importe um CSV ou toque em Adicionar.")+'</div>';
+  return h+'<div style="height:80px"></div></div>';
+}
+function filtersHTML(f,open){
+  if(!open) return "";
+  var ord=[["adega","Organização da adega"],["nome","Nome (A–Z)"],["safra_nova","Safra (mais nova)"],["safra_velha","Safra (mais antiga)"],["valor_maior","Valor (maior)"],["valor_menor","Valor (menor)"]];
+  function opts(arr,val){return arr.map(function(o){return '<option value="'+o[0]+'"'+(String(o[0])===String(val)?" selected":"")+'>'+o[1]+'</option>';}).join("");}
+  function topts(val){var o='<option value="Todos"'+(val==="Todos"?" selected":"")+'>Todos</option>';return o+TIPOS.map(function(t){return '<option'+(t===val?" selected":"")+'>'+t+'</option>';}).join("");}
+  var h='<div class="fpanel">';
+  h+='<div class="flabel">Tipo</div><div class="sel"><select data-f="tipo">'+topts(f.tipo)+'</select></div>';
+  h+='<div class="flabel" style="margin-top:14px">Ordenar</div><div class="sel"><select data-f="ordenar">'+opts(ord,f.ordenar)+'</select></div>';
+  h+='<button class="ghost" style="width:100%;margin-top:16px;padding:12px" data-clear="1">Limpar filtros</button></div>';
+  return h;
+}
+function wineCard(w){
+  var j=janelaStatus(w);
+  var jhtml=j?'<div style="display:flex;align-items:center;gap:6px;font-size:12px;letter-spacing:1.5px;color:'+j.color+'"><span class="dot" style="background:'+j.color+'"></span>'+j.label.toUpperCase()+'</div>':'';
+  return '<div class="card" data-loc="'+w.id+'"><div style="display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:8px"><span class="dot" style="width:11px;height:11px;background:'+(TIPO_COLOR[w.tipo]||"#7C2A32")+'"></span><span class="tag">'+esc((w.tipo||"").toUpperCase())+'</span></div><span class="yr">'+esc(w.safra)+'</span></div>'+
+  '<div class="vname">'+esc(w.vinho)+'</div><div class="muted" style="font-size:13.5px;margin-top:3px">'+esc(w.regiao)+'</div>'+
+  (w.uvas?'<div class="muted" style="font-size:12.5px;margin-top:6px;opacity:.85">'+esc(w.uvas)+'</div>':'')+
+  '<div class="divider"></div><div style="display:flex;align-items:flex-end;justify-content:space-between"><div>'+jhtml+'<div class="mono muted" style="font-size:12px;margin-top:4px">'+esc(positionLabel(w))+'</div></div><div style="text-align:right"><div class="mono" style="font-size:17px;color:var(--gold)">'+brl(w.valor)+'</div><div class="eyebrow" style="font-size:10px">valor</div></div></div></div>';
+}
+function aiBtns(w){
+  var prompt="Quero abrir o vinho "+w.vinho+(w.safra?" "+w.safra:"")+", mas antes gostaria de saber qual a janela de consumo/apice dele, e quais pratos harmonizariam bem?";
+  var q=encodeURIComponent(prompt);
+  return '<div style="margin-top:14px"><button data-aipx="'+q+'" style="width:100%;background:var(--gold);color:#1B1413;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer">Harmonização &amp; auge — pesquisar no Perplexity</button></div>';
+}
+function detailOverlay(){
+  var w=S.locate, j=janelaStatus(w), m=w.module_id?S.modulesById[w.module_id]:null;
+  var h='<div class="overlay"><div style="display:flex;align-items:center;justify-content:space-between;padding:calc(24px + env(safe-area-inset-top)) 22px 10px"><button class="xbtn" data-close="1">‹</button><span class="eyebrow">Detalhes do vinho</span><button class="xbtn" data-close="1">✕</button></div><div class="scroll" style="padding:0 16px 20px">';
+  h+='<div style="text-align:center">';
+  h+='<div style="display:flex;align-items:center;justify-content:center;gap:8px"><span class="dot" style="width:10px;height:10px;background:'+(TIPO_COLOR[w.tipo]||"#7C2A32")+'"></span><span class="tag">'+esc((w.tipo||"").toUpperCase())+'</span></div>';
+  h+='<div style="font-family:var(--serif);font-size:25px;margin-top:8px">'+esc(w.vinho)+'</div>';
+  h+='<div class="muted" style="font-size:15px;margin-top:2px">Safra '+esc(w.safra)+'</div>';
+  h+='<div class="muted" style="font-size:14px;margin-top:4px">'+esc(w.regiao)+'</div>';
+  if(w.uvas) h+='<div class="muted" style="font-size:13px;margin-top:6px;opacity:.85">'+esc(w.uvas)+'</div>';
+  h+='<div class="divider" style="margin:14px 0"></div>';
+  h+='<div style="display:flex;align-items:center;justify-content:center;gap:28px">';
+  h+='<div style="text-align:left">'+(j?('<div style="display:flex;align-items:center;gap:6px;font-size:12px;letter-spacing:1.5px;color:'+j.color+'"><span class="dot" style="background:'+j.color+'"></span>'+j.label.toUpperCase()+'</div>'):'<div class="muted" style="font-size:12px">SEM JANELA DEFINIDA</div>')+'</div>';
+  h+='<div style="text-align:right"><div class="mono" style="font-size:19px;color:var(--gold)">'+brl(w.valor)+'</div><div class="eyebrow" style="font-size:10px">valor</div></div>';
+  h+='</div><div class="mono" style="font-size:13px;color:var(--gold);margin-top:12px">'+esc(positionLabel(w))+'</div></div>';
+  if(m){
+    h+='<div class="locrow"><div><div class="eyebrow" style="padding:16px 4px 6px">Parede</div>'+wallSVG(wallModules(m.wall_id),m.id,false,false)+'</div><div><div class="eyebrow" style="padding:16px 4px 6px">'+esc(m.name)+'</div>'+moduleGridSVG(m,w.row,w.col,false,w.id)+'</div></div>';
+  } else {
+    h+='<div style="text-align:center;color:var(--mut);padding:30px 20px">Posição não definida — toque em Editar pra escolher onde essa garrafa fica.</div>';
+  }
+  h+='<div style="display:flex;gap:10px;margin-top:22px"><button data-editdetail="'+w.id+'" style="flex:1;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer">✎ Editar</button><button data-deldetail="'+w.id+'" style="flex:1;background:transparent;border:1px solid var(--wine);color:#D98A8A;border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer">🗑 Excluir</button></div>';
+  h+=aiBtns(w);
+  h+='</div><div style="padding:12px 16px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--line)"><button data-close="1" style="width:100%;background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:12px;padding:14px;font-size:16px;font-weight:600;cursor:pointer">‹ Voltar à lista</button></div>';
+  return h+'</div>';
+}
+function editSheet(){
+  var f=S.draft||{}; var isEdit=!!f.id;
+  var tsel=TIPOS.map(function(t){return '<option'+(t===f.tipo?' selected':'')+'>'+t+'</option>';}).join("");
+  var posTxt=f.module_id?positionLabel({module_id:f.module_id,row:f.row,col:f.col,depth:f.depth}):"Toque para escolher na adega";
+  var h='<div class="sheet"><div class="sheetbox"><div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px 8px"><span style="font-family:var(--serif);font-size:20px">'+(isEdit?"Editar rótulo":"Novo rótulo")+'</span><button class="xbtn" data-sheetclose="1" style="border:none;background:none;color:var(--mut)">✕</button></div><div class="scroll" style="padding:0 18px 16px">';
+  h+='<label class="lab">Nome do vinho</label><input class="field" id="f_vinho" value="'+esc(f.vinho||"")+'" placeholder="Torres Mas La Plana">';
+  h+='<label class="lab">Tipo</label><div class="sel"><select id="f_tipo" class="field" style="padding-right:34px">'+tsel+'</select></div>';
+  h+='<label class="lab">Região</label><input class="field" id="f_regiao" value="'+esc(f.regiao||"")+'" placeholder="Pauillac - Bordeaux (França)">';
+  h+='<div style="display:flex;gap:10px"><div style="flex:1"><label class="lab">Safra</label><input class="field" id="f_safra" inputmode="numeric" value="'+esc(f.safra||"")+'"></div><div style="flex:1"><label class="lab">Valor (R$)</label><input class="field" id="f_valor" inputmode="numeric" value="'+esc(f.valor||"")+'"></div></div>';
+  h+='<label class="lab">Uvas</label><input class="field" id="f_uvas" value="'+esc(f.uvas||"")+'" placeholder="Nebbiolo">';
+  h+='<label class="lab">Janela de consumo</label><input class="field" id="f_janela" value="'+esc(f.janela||"")+'" placeholder="2027-2050">';
+  h+='<label class="lab">Local na adega</label><button data-pickopen="1" style="width:100%;text-align:left;background:var(--ink);border:1px solid '+(f.module_id?"var(--gold)":"var(--line)")+';border-radius:10px;padding:13px 12px;color:'+(f.module_id?"var(--gold)":"var(--mut)")+';font-family:var(--mono);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">'+esc(posTxt)+'<span style="color:var(--mut)">▸</span></button>';
+  h+='<div id="poserr" style="color:var(--wine);font-size:11px;margin-top:4px"></div>';
+  h+='</div><div style="padding:10px 18px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--line)"><button class="primary" data-save="1">'+(isEdit?"Salvar alterações":"Adicionar à adega")+'</button></div></div></div>';
+  return h;
+}
+function pickerOverlay(){
+  var pk=S.picker||{};
+  var h='<div class="overlay" style="z-index:50"><div style="display:flex;align-items:center;justify-content:space-between;padding:calc(22px + env(safe-area-inset-top)) 20px 8px"><span class="eyebrow">Escolher local na adega</span><button class="xbtn" data-pickclose="1">✕</button></div><div class="scroll" style="padding:0 16px 24px">';
+  if(!S.modules.length){
+    h+='<div class="muted" style="text-align:center;padding:30px 10px">Você ainda não configurou nenhum módulo. Feche aqui e vá em ⚙ Adega pra criar o primeiro.</div>';
+    return h+'</div></div>';
+  }
+  if(!pk.wallId){
+    h+='<div class="muted" style="text-align:center;font-size:14px;margin:6px 0 8px">Escolha a parede</div>';
+    h+='<div class="navrow" style="justify-content:center">';
+    S.walls.forEach(function(w){ if(wallModules(w.id).length) h+='<button class="ghost" data-pickwall="'+w.id+'">'+esc(w.name)+'</button>'; });
+    h+='</div>';
+  } else if(!pk.moduleId){
+    h+='<div class="muted" style="text-align:center;font-size:14px;margin:6px 0 8px">Toque no módulo onde guardar</div>'+wallSVG(wallModules(pk.wallId),null,true,false);
+    h+='<button class="ghost" style="width:100%;margin-top:12px;padding:12px" data-pickback="1">‹ Trocar parede</button>';
+  } else {
+    var m=S.modulesById[pk.moduleId];
+    if(pk.row && pk.col){
+      var col=m.columns[pk.col-1];
+      var d=Number(col.depth);
+      var hdr=(m.shape==="rect")?(esc(m.name)+' · L'+pk.row+' · C'+pk.col):(esc(m.name)+' · Vaga '+pk.col);
+      h+='<div style="text-align:center;margin:6px 0 14px"><div style="font-family:var(--serif);font-size:20px">'+hdr+'</div><div class="muted" style="font-size:13px">Escolha a profundidade</div></div>';
+      h+='<div style="display:flex;gap:10px">';
+      var occ=occupiedSet(S.draft&&S.draft.id);
+      for(var i=1;i<=d;i++){
+        var taken=occ[m.id+"|"+pk.row+"|"+pk.col+"|"+i];
+        h+='<div class="depthbar'+(taken?" taken":"")+'" '+(taken?"":'data-pickdepth="'+i+'"')+'>'+depthLabel(i,d)+(taken?'<div style="font-size:10px;opacity:.7">ocupado</div>':'')+'</div>';
+      }
+      h+='</div><button class="ghost" style="width:100%;margin-top:16px;padding:12px" data-pickback="1">‹ Voltar às posições</button>';
+    } else {
+      h+='<div style="text-align:center;margin:6px 0 12px"><span style="font-family:var(--serif);font-size:20px">'+esc(m.name)+'</span> <span class="muted">— toque no espaço livre</span></div>';
+      h+=moduleGridSVG(m,null,null,true,S.draft&&S.draft.id);
+      h+='<button class="ghost" style="width:100%;margin-top:12px;padding:12px" data-pickback="1">‹ Trocar módulo</button>';
+    }
+  }
+  return h+'</div></div>';
+}
+
+/* ---------------- eventos ---------------- */
+function wire(){
+  var sc=document.getElementById("scroll");
+  document.querySelectorAll("[data-authmode]").forEach(function(b){b.onclick=function(){S.authMode=b.getAttribute("data-authmode");S.authErr="";S.authMsg="";render();};});
+  document.querySelectorAll("[data-authsubmit]").forEach(function(b){b.onclick=function(){doAuth();};});
+  var ae=document.getElementById("a_email"); if(ae)ae.oninput=function(){S.authEmail=ae.value;};
+  var ap=document.getElementById("a_pass"); if(ap)ap.oninput=function(){S.authPass=ap.value;};
+  document.querySelectorAll("[data-logout]").forEach(function(b){b.onclick=async function(){await sb.auth.signOut();};});
+  document.querySelectorAll("[data-nav]").forEach(function(b){b.onclick=function(){S.view=b.getAttribute("data-nav");render();};});
+
+  document.querySelectorAll("[data-mkcellar]").forEach(function(b){b.onclick=function(){doCreateCellar(b.getAttribute("data-mkcellar"));};});
+  document.querySelectorAll("[data-wall]").forEach(function(b){b.onclick=function(){S.builderWallId=b.getAttribute("data-wall");render();};});
+  document.querySelectorAll("[data-addwall]").forEach(function(b){b.onclick=function(){doAddWall();};});
+  var mn=document.getElementById("m_name"); if(mn)mn.oninput=function(){S.builder.name=mn.value;};
+  document.querySelectorAll("[data-shape]").forEach(function(b){b.onclick=function(){S.builder.shape=b.getAttribute("data-shape");render();};});
+  var mr=document.getElementById("m_rows"); if(mr)mr.oninput=function(){S.builder.rows=parseInt(mr.value,10)||1;};
+  var mpc=document.getElementById("m_poolcount"); if(mpc)mpc.oninput=function(){S.builder.poolCount=parseInt(mpc.value,10)||1;};
+  var mpd=document.getElementById("m_pooldepth"); if(mpd)mpd.oninput=function(){S.builder.poolDepth=parseInt(mpd.value,10)||1;};
+  document.querySelectorAll("[data-modw]").forEach(function(inp){inp.onchange=function(){var id=inp.getAttribute("data-modw"),v=Number(inp.value)||1;S.modulesById[id].floor_w=v;sb.from("modules").update({floor_w:v}).eq("id",id).then(function(){});var c=document.getElementById("wallcanvas");if(c)c.innerHTML=wallSVG(wallModules(S.builderWallId),null,false,true);};});
+  document.querySelectorAll("[data-modh]").forEach(function(inp){inp.onchange=function(){var id=inp.getAttribute("data-modh"),v=Number(inp.value)||1;S.modulesById[id].floor_h=v;sb.from("modules").update({floor_h:v}).eq("id",id).then(function(){});var c=document.getElementById("wallcanvas");if(c)c.innerHTML=wallSVG(wallModules(S.builderWallId),null,false,true);};});
+  document.querySelectorAll("[data-colw]").forEach(function(inp){inp.oninput=function(){S.builder.columns[+inp.getAttribute("data-colw")].width=Number(inp.value)||1;};});
+  document.querySelectorAll("[data-cold]").forEach(function(inp){inp.oninput=function(){S.builder.columns[+inp.getAttribute("data-cold")].depth=parseInt(inp.value,10)||1;};});
+  document.querySelectorAll("[data-rmcol]").forEach(function(b){b.onclick=function(){S.builder.columns.splice(+b.getAttribute("data-rmcol"),1);render();};});
+  document.querySelectorAll("[data-addcol]").forEach(function(b){b.onclick=function(){S.builder.columns.push({width:1,depth:1});render();};});
+  document.querySelectorAll("[data-addmodule]").forEach(function(b){b.onclick=function(){doAddModule();};});
+  document.querySelectorAll("[data-delmod]").forEach(function(b){b.onclick=function(){if(confirm("Excluir este módulo? Vinhos posicionados nele ficam sem local."))doDeleteModule(b.getAttribute("data-delmod"));};});
+  wireDrag();
+
+  var iu=document.getElementById("i_url"); if(iu)iu.oninput=function(){S.importUrl=iu.value;};
+  var it=document.getElementById("i_text"); if(it)it.oninput=function(){S.importText=it.value;};
+  document.querySelectorAll("[data-importparse]").forEach(function(b){b.onclick=function(){doImportParse();};});
+  document.querySelectorAll("[data-importconfirm]").forEach(function(b){b.onclick=function(){doImportConfirm();};});
+
+  document.querySelectorAll("[data-loc]").forEach(function(b){b.onclick=function(){var id=b.getAttribute("data-loc");S.locate=S.wines.filter(function(w){return w.id===id;})[0];render();};});
+  document.querySelectorAll("[data-close]").forEach(function(b){b.onclick=function(){S.locate=null;render();};});
+  document.querySelectorAll("[data-sheetclose]").forEach(function(b){b.onclick=function(){S.sheet=null;S.draft=null;S.picker=null;render();};});
+  document.querySelectorAll("[data-add]").forEach(function(b){b.onclick=function(){S.draft={tipo:"Tinto",vinho:"",regiao:"",safra:"",uvas:"",valor:"",janela:"",module_id:null,row:null,col:null,depth:null};S.sheet=true;render();};});
+  document.querySelectorAll("[data-editdetail]").forEach(function(b){b.onclick=function(){var id=b.getAttribute("data-editdetail");var w=S.wines.filter(function(x){return x.id===id;})[0];if(!w)return;S.draft={id:w.id,tipo:w.tipo,vinho:w.vinho,regiao:w.regiao,safra:w.safra,uvas:w.uvas,valor:w.valor,janela:w.janela,module_id:w.module_id,row:w.row,col:w.col,depth:w.depth};S.sheet=true;render();};});
+  document.querySelectorAll("[data-deldetail]").forEach(function(b){b.onclick=function(){var id=b.getAttribute("data-deldetail");var w=S.wines.filter(function(x){return x.id===id;})[0];if(!w)return;if(confirm('Excluir "'+w.vinho+'" da adega?'))doDeleteWine(id);};});
+  document.querySelectorAll("[data-fopen]").forEach(function(b){b.onclick=function(){S.fOpen=!S.fOpen;render();};});
+  document.querySelectorAll("[data-clear]").forEach(function(b){b.onclick=function(){S.f=defFilters();render();};});
+  document.querySelectorAll("select[data-f]").forEach(function(sel){sel.onchange=function(){var k=sel.getAttribute("data-f"),v=sel.value;S.f[k]=v;render();};});
+  var q=document.getElementById("q"); if(q)q.oninput=function(){S.q=q.value;deb(q,sc);};
+  if(S.sheet){
+    function bd(id,k){var e=document.getElementById(id); if(e)e.oninput=function(){S.draft[k]=e.value;};}
+    bd("f_vinho","vinho"); bd("f_regiao","regiao"); bd("f_safra","safra"); bd("f_valor","valor"); bd("f_uvas","uvas"); bd("f_janela","janela");
+    var ts=document.getElementById("f_tipo"); if(ts)ts.onchange=function(){S.draft.tipo=ts.value;};
+    var pk=document.querySelector("[data-pickopen]"); if(pk)pk.onclick=function(){S.picker={wallId:S.walls.length===1?S.walls[0].id:null,moduleId:null,row:null,col:null};render();};
+    var sv=document.querySelector("[data-save]"); if(sv)sv.onclick=function(){doSaveWine();};
+  }
+  document.querySelectorAll("[data-pickwall]").forEach(function(b){b.onclick=function(){S.picker.wallId=b.getAttribute("data-pickwall");render();};});
+  document.querySelectorAll("[data-pickmod]").forEach(function(b){b.onclick=function(){S.picker.moduleId=b.getAttribute("data-pickmod");S.picker.row=null;S.picker.col=null;render();};});
+  document.querySelectorAll("[data-pickcell]").forEach(function(b){b.onclick=function(){
+    var a=b.getAttribute("data-pickcell").split(",");
+    var row=+a[0], col=+a[1];
+    var m=S.modulesById[S.picker.moduleId];
+    var colDef=m.columns[col-1];
+    if(Number(colDef.depth)<=1){ S.draft.module_id=m.id;S.draft.row=row;S.draft.col=col;S.draft.depth=1;S.picker=null;render(); return; }
+    S.picker.row=row; S.picker.col=col; render();
+  };});
+  document.querySelectorAll("[data-pickdepth]").forEach(function(b){b.onclick=function(){S.draft.module_id=S.picker.moduleId;S.draft.row=S.picker.row;S.draft.col=S.picker.col;S.draft.depth=+b.getAttribute("data-pickdepth");S.picker=null;render();};});
+  document.querySelectorAll("[data-pickback]").forEach(function(b){b.onclick=function(){if(S.picker.row)S.picker.row=null,S.picker.col=null;else if(S.picker.moduleId)S.picker.moduleId=null;else S.picker.wallId=null;render();};});
+  document.querySelectorAll("[data-pickclose]").forEach(function(b){b.onclick=function(){S.picker=null;render();};});
+  document.querySelectorAll("[data-aipx]").forEach(function(b){b.onclick=function(){window.open("https://www.perplexity.ai/search?q="+b.getAttribute("data-aipx"),"_blank");};});
+}
+function wireDrag(){
+  var canvas=document.getElementById("wallcanvas");
+  if(!canvas) return;
+  document.querySelectorAll("[data-dragmod]").forEach(function(el){
+    el.addEventListener("pointerdown",function(ev){
+      ev.preventDefault();
+      var modId=el.getAttribute("data-dragmod");
+      var m=S.modulesById[modId];
+      var t=S.wallTransform;
+      var startX=ev.clientX, startY=ev.clientY, startFx=m.floor_x, startFy=m.floor_y;
+      var svg=canvas.querySelector("svg");
+      var rect=svg.getBoundingClientRect();
+      var pxPerFloorX=(rect.width/t.W)*t.scale, pxPerFloorY=(rect.height/t.H)*t.scale;
+      function onMove(mv){
+        var dx=(mv.clientX-startX)/pxPerFloorX, dy=(mv.clientY-startY)/pxPerFloorY;
+        m.floor_x=Math.round((startFx+dx)*10)/10; m.floor_y=Math.round((startFy+dy)*10)/10;
+        canvas.innerHTML=wallSVG(wallModules(S.builderWallId),modId,false,true);
+      }
+      function onUp(){
+        document.removeEventListener("pointermove",onMove);
+        document.removeEventListener("pointerup",onUp);
+        sb.from("modules").update({floor_x:m.floor_x,floor_y:m.floor_y}).eq("id",modId).then(function(){});
+      }
+      document.addEventListener("pointermove",onMove);
+      document.addEventListener("pointerup",onUp);
+    });
+  });
+}
+var DEB=null;
+function deb(inputEl,sc){
+  if(DEB) clearTimeout(DEB);
+  var top=sc?sc.scrollTop:0;
+  DEB=setTimeout(function(){ DEB=null; renderKeep(inputEl,top); },180);
+}
+function renderKeep(inputEl,scrollTop){
+  var id=inputEl.id, pos=inputEl.selectionStart; render();
+  var e=document.getElementById(id); if(e){e.focus();try{e.setSelectionRange(pos,pos);}catch(x){} }
+  var sc=document.getElementById("scroll"); if(sc)sc.scrollTop=scrollTop;
+}
+
+/* ---------------- ações (auth) ---------------- */
+async function doAuth(){
+  S.authErr=""; S.authMsg=""; S.authBusy=true; render();
+  try{
+    if(S.authMode==="signup"){
+      var r=await sb.auth.signUp({email:S.authEmail.trim(),password:S.authPass});
+      if(r.error){ S.authErr=r.error.message; }
+      else if(!r.data.session){ S.authMsg="Conta criada! Confira seu e-mail pra confirmar antes de entrar."; }
+    } else {
+      var r2=await sb.auth.signInWithPassword({email:S.authEmail.trim(),password:S.authPass});
+      if(r2.error){ S.authErr=r2.error.message; }
+    }
+  } catch(e){ S.authErr=String(e); }
+  S.authBusy=false; render();
+}
+
+/* ---------------- ações (builder) ---------------- */
+async function doCreateCellar(mode){
+  var name=((document.getElementById("b_cellarname")||{}).value||"").trim()||"Minha adega";
+  var r=await sb.from("cellars").insert({name:name}).select().single();
+  if(r.error){ alert(r.error.message); return; }
+  S.cellar=r.data;
+  var wallName = mode==="refrigerador"?"Refrigerador":(mode==="ambiente"?"Parede 1":"Minha parede");
+  var rw=await sb.from("walls").insert({cellar_id:S.cellar.id,name:wallName,position:0}).select().single();
+  if(rw.error){ alert(rw.error.message); return; }
+  S.walls=[rw.data]; S.builderWallId=rw.data.id; S.modules=[]; S.modulesById={};
+  S.builder=freshBuilderDraft();
+  if(mode==="refrigerador"){ S.builder.name="Refrigerador"; S.builder.shape="rect"; }
+  render();
+}
+async function doAddWall(){
+  var name=prompt("Nome da parede:");
+  if(!name||!name.trim()) return;
+  var r=await sb.from("walls").insert({cellar_id:S.cellar.id,name:name.trim(),position:S.walls.length}).select().single();
+  if(r.error){ alert(r.error.message); return; }
+  await loadWalls();
+  S.builderWallId=r.data.id;
+  render();
+}
+async function doAddModule(){
+  var bd=S.builder;
+  if(!bd.name.trim()){ alert("Dê um nome pro módulo."); return; }
+  var rows = bd.shape==="rect" ? bd.rows : 1;
+  var fw,fh;
+  if(bd.shape==="rect"){ fw=Math.max(1,bd.columns.length*0.4); fh=Math.max(1,bd.rows*0.4); }
+  else { var side=Math.max(1,Math.sqrt(bd.poolCount)*0.6); fw=side; fh=side; }
+  var existing=wallModules(S.builderWallId);
+  var fx=0, fy=0;
+  if(existing.length) fx=Math.max.apply(null,existing.map(function(m){return m.floor_x+m.floor_w;}))+0.2;
+  var r=await sb.from("modules").insert({wall_id:S.builderWallId,name:bd.name.trim(),shape:bd.shape,rows:rows,floor_x:fx,floor_y:fy,floor_w:fw,floor_h:fh}).select().single();
+  if(r.error){ alert(r.error.message); return; }
+  var cols=[];
+  if(bd.shape==="rect"){
+    cols=bd.columns.map(function(c,i){return {module_id:r.data.id,col_index:i,width:c.width,depth:c.depth};});
+  } else {
+    for(var i=0;i<bd.poolCount;i++) cols.push({module_id:r.data.id,col_index:i,width:1,depth:bd.poolDepth});
+  }
+  var rc=await sb.from("module_columns").insert(cols);
+  if(rc.error){ alert(rc.error.message); return; }
+  S.builder=freshBuilderDraft();
+  await loadModules();
+  render();
+}
+async function doDeleteModule(id){
+  await sb.from("modules").delete().eq("id",id);
+  await loadModules(); await loadWines();
+  render();
+}
+
+/* ---------------- ações (import) ---------------- */
+async function doImportParse(){
+  S.importErr=""; S.importPreview=null; S.importBusy=true; render();
+  try{
+    var text=S.importText;
+    if(S.importUrl.trim()){
+      var resp=await fetch(S.importUrl.trim()+((S.importUrl.indexOf("?")>=0?"&":"?")+"t="+Date.now()));
+      text=await resp.text();
+    }
+    var rows=parseWineCSV(text||"");
+    if(!rows.length){ S.importErr="Não encontrei vinhos — confira se tem uma coluna VINHO no CSV."; }
+    else S.importPreview=rows;
+  } catch(e){ S.importErr="Falha ao ler: "+String(e); }
+  S.importBusy=false; render();
+}
+async function doImportConfirm(){
+  if(!S.importPreview||!S.importPreview.length) return;
+  var payload=S.importPreview.map(function(r){return Object.assign({cellar_id:S.cellar.id},r);});
+  var r=await sb.from("wines").insert(payload);
+  if(r.error){ alert(r.error.message); return; }
+  S.importPreview=null; S.importText=""; S.importUrl="";
+  await loadWines();
+  S.view="main"; render();
+}
+
+/* ---------------- ações (vinhos) ---------------- */
+async function doSaveWine(){
+  var f=S.draft;
+  var pe=document.getElementById("poserr");
+  if(!f.vinho||!f.vinho.trim()){ if(pe)pe.textContent="Informe o nome do vinho."; return; }
+  var payload={cellar_id:S.cellar.id,module_id:f.module_id||null,row:f.row||null,col:f.col||null,depth:f.module_id?(f.depth||1):null,
+    tipo:f.tipo||"Tinto",vinho:f.vinho.trim(),regiao:(f.regiao||"").trim(),safra:f.safra||"",uvas:(f.uvas||"").trim(),valor:toNum(f.valor),janela:(f.janela||"").trim()};
+  var r;
+  if(f.id) r=await sb.from("wines").update(payload).eq("id",f.id);
+  else r=await sb.from("wines").insert(payload);
+  if(r.error){ if(pe)pe.textContent = r.error.code==="23505" ? "Esse espaço já está ocupado." : r.error.message; return; }
+  S.sheet=null; S.draft=null;
+  await loadWines();
+  if(S.locate) S.locate=S.wines.filter(function(w){return w.id===S.locate.id;})[0]||null;
+  render();
+}
+async function doDeleteWine(id){
+  await sb.from("wines").delete().eq("id",id);
+  S.locate=null;
+  await loadWines();
+  render();
+}
+
+/* ---------------- init ---------------- */
+(async function init(){
+  var g=await sb.auth.getSession();
+  S.session=g.data.session;
+  sb.auth.onAuthStateChange(function(_ev,sess){
+    var had=S.session; S.session=sess;
+    if(!sess){ S.view="auth"; S.cellar=null; S.walls=[]; S.modules=[]; S.wines=[]; render(); }
+    else if(!had){ afterLogin(); }
+  });
+  if(S.session) await afterLogin();
+  else { S.view="auth"; render(); }
+})();
+</script>
+</body>
+</html>
