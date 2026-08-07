@@ -261,22 +261,22 @@ function wallSVG(modules,highlightId,tap,drag){
     var on=(m.id===highlightId);
     var x=px(m.floor_x), y=py(m.floor_y), w=m.floor_w*scale, h=m.floor_h*scale;
     var fill=on?"rgba(217,180,94,.18)":"#271C1B", stroke=on?"#D9B45E":"#3A2A28", sw=on?1.6:.8;
-    var attrs=(tap?' data-pickmod="'+m.id+'"':"")+(drag?' data-dragmod="'+m.id+'"':"")+((tap||drag)?' style="cursor:pointer"':"");
+    var attrs=(tap?' data-pickmod="'+m.id+'"':"")+(drag?' data-dragmod="'+m.id+'"':"")+((tap||drag)?' style="cursor:grab"':"");
+    s+='<g data-mod-group="'+m.id+'" transform="translate('+x+','+y+')"'+attrs+'>';
     if(m.shape==="circle"){
-      s+='<ellipse cx="'+(x+w/2)+'" cy="'+(y+h/2)+'" rx="'+(w/2)+'" ry="'+(h/2)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+attrs+'/>';
+      s+='<ellipse cx="'+(w/2)+'" cy="'+(h/2)+'" rx="'+(w/2)+'" ry="'+(h/2)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"/>';
     } else if(m.shape==="triangle"){
-      var p1x=x+w/2,p1y=y,p2x=x+w,p2y=y+h,p3x=x,p3y=y+h;
-      s+='<polygon points="'+p1x+','+p1y+' '+p2x+','+p2y+' '+p3x+','+p3y+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+attrs+'/>';
+      s+='<polygon points="'+(w/2)+',0 '+w+','+h+' 0,'+h+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"/>';
     } else if(m.shape==="diamond"){
-      var dp1x=x+w/2,dp1y=y,dp2x=x+w,dp2y=y+h/2,dp3x=x+w/2,dp3y=y+h,dp4x=x,dp4y=y+h/2;
-      s+='<polygon points="'+dp1x+','+dp1y+' '+dp2x+','+dp2y+' '+dp3x+','+dp3y+' '+dp4x+','+dp4y+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+attrs+'/>';
+      s+='<polygon points="'+(w/2)+',0 '+w+','+(h/2)+' '+(w/2)+','+h+' 0,'+(h/2)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"/>';
     } else {
-      s+='<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="5" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+attrs+'/>';
+      s+='<rect x="0" y="0" width="'+w+'" height="'+h+'" rx="5" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"/>';
     }
-    s+=moduleTextureSVG(m,x,y,w,h,stroke);
-    var lblY = m.shape==="triangle" ? (y+h-6) : (y+h+11);
-    if(Math.min(w,h)>30) s+='<rect x="'+(x+w/2-Math.min(w*0.9,esc(m.name).length*3.4+6)/2)+'" y="'+(lblY-8)+'" width="'+Math.min(w*0.9,esc(m.name).length*3.4+6)+'" height="11" fill="var(--bg)" opacity="0.72" style="pointer-events:none"/>';
-    s+='<text x="'+(x+w/2)+'" y="'+lblY+'" text-anchor="middle" font-size="'+(Math.min(w,h)>36?10:8)+'" font-family="monospace" fill="'+(on?"#D9B45E":"#93826F")+'" style="pointer-events:none">'+esc(m.name)+'</text>';
+    s+=moduleTextureSVG(m,0,0,w,h,stroke);
+    var lblY = m.shape==="triangle" ? (h-6) : (h+11);
+    if(Math.min(w,h)>30) s+='<rect x="'+(w/2-Math.min(w*0.9,esc(m.name).length*3.4+6)/2)+'" y="'+(lblY-8)+'" width="'+Math.min(w*0.9,esc(m.name).length*3.4+6)+'" height="11" fill="var(--bg)" opacity="0.72" style="pointer-events:none"/>';
+    s+='<text x="'+(w/2)+'" y="'+lblY+'" text-anchor="middle" font-size="'+(Math.min(w,h)>36?10:8)+'" font-family="monospace" fill="'+(on?"#D9B45E":"#93826F")+'" style="pointer-events:none">'+esc(m.name)+'</text>';
+    s+='</g>';
   });
   return s+'</svg>';
 }
@@ -709,15 +709,20 @@ function wireDrag(){
       var svg=canvas.querySelector("svg");
       var rect=svg.getBoundingClientRect();
       var pxPerFloorX=(rect.width/t.W)*t.scale, pxPerFloorY=(rect.height/t.H)*t.scale;
+      var grp=canvas.querySelector('[data-mod-group="'+modId+'"]');
+      var moved=false;
       function onMove(mv){
+        moved=true;
         var dx=(mv.clientX-startX)/pxPerFloorX, dy=(mv.clientY-startY)/pxPerFloorY;
         m.floor_x=Math.round((startFx+dx)*10)/10; m.floor_y=Math.round((startFy+dy)*10)/10;
-        canvas.innerHTML=wallSVG(wallModules(S.builderWallId),modId,false,true);
+        var px2=t.offX+(m.floor_x-t.minX)*t.scale, py2=t.offY+(m.floor_y-t.minY)*t.scale;
+        if(grp) grp.setAttribute("transform","translate("+px2+","+py2+")");
       }
       function onUp(){
         document.removeEventListener("pointermove",onMove);
         document.removeEventListener("pointerup",onUp);
-        sb.from("modules").update({floor_x:m.floor_x,floor_y:m.floor_y}).eq("id",modId).then(function(){});
+        if(!moved) return;
+        sb.from("modules").update({floor_x:m.floor_x,floor_y:m.floor_y}).eq("id",modId).then(function(){ render(); });
       }
       document.addEventListener("pointermove",onMove);
       document.addEventListener("pointerup",onUp);
