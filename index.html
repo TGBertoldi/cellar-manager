@@ -142,8 +142,8 @@ var S={
   q:"", f:defFilters(), fOpen:false,
   locate:null, sheet:null, draft:null, picker:null,
   authMode:"login", authEmail:"", authPass:"", authErr:"", authMsg:"", authBusy:false,
-  builder:freshBuilderDraft(),
-  wallTransform:null,
+  builder:freshBuilderDraft(), builderErr:"",
+  wallTransform:null, confirmDlg:null, promptDlg:null,
   importUrl:"", importText:"", importPreview:null, importErr:"", importBusy:false
 };
 function defFilters(){ return {tipo:"Todos",ordenar:"adega",vmin:0,vmax:1e9}; }
@@ -404,8 +404,10 @@ function render(){
   var fab=(S.view==="main")?'<button class="fab" data-add="1">＋ Adicionar</button>':"";
   var overlays="";
   if(S.view==="main") overlays=(S.locate?detailOverlay():"")+(S.sheet?editSheet():"")+(S.picker?pickerOverlay():"");
+  overlays+=(S.confirmDlg?confirmOverlay():"")+(S.promptDlg?promptOverlay():"");
   app.innerHTML='<div class="scroll" id="scroll">'+body+'</div>'+fab+overlays;
   wire();
+  if(S.promptDlg){ var pi=document.getElementById("promptInput"); if(pi) pi.focus(); }
 }
 
 /* ---------------- auth ---------------- */
@@ -438,6 +440,7 @@ function builderScreen(){
     h+='<button data-mkcellar="parede"><div class="t">Parede única</div><div class="d">Só uma parede ou estante — vai direto pro construtor de módulos.</div></button>';
     h+='<button data-mkcellar="refrigerador"><div class="t">Refrigerador</div><div class="d">Atalho rápido: já cria um módulo retangular simples pra preencher.</div></button>';
     h+='</div>';
+    if(S.builderErr) h+='<div class="errtext">'+esc(S.builderErr)+'</div>';
     return h+'</div>';
   }
   h+='<div class="eyebrow" style="margin-top:6px">Paredes</div>';
@@ -483,6 +486,7 @@ function builderScreen(){
     h+='<div class="muted" style="font-size:11.5px;margin-top:8px;line-height:1.5">Módulos redondos/triangulares são um "pool" — uma lista de vagas numeradas, sem linha/coluna. Profundidade 1 = uma garrafa por vaga.</div>';
   }
   h+='<button class="primary" data-addmodule="1" style="margin-top:16px">Salvar módulo</button>';
+  if(S.builderErr) h+='<div class="errtext">'+esc(S.builderErr)+'</div>';
   h+='<button class="ghost" data-nav="main" style="width:100%;margin-top:18px;padding:12px">Ir para o app ›</button>';
   return h+'</div>';
 }
@@ -593,6 +597,26 @@ function editSheet(){
   h+='</div><div style="padding:10px 18px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--line)"><button class="primary" data-save="1">'+(isEdit?"Salvar alterações":"Adicionar à adega")+'</button></div></div></div>';
   return h;
 }
+/* diálogos próprios do app — nunca usar confirm()/alert()/prompt() nativos, pois travam ou falham em PWA instalado (modo standalone no iPhone) */
+function confirmOverlay(){
+  var d=S.confirmDlg||{};
+  var h='<div class="sheet" style="z-index:70"><div class="sheetbox" style="border-radius:16px;margin:0 18px calc(18px + env(safe-area-inset-bottom));max-height:none">';
+  h+='<div style="padding:22px 20px">';
+  h+='<div style="font-family:var(--serif);font-size:17px;line-height:1.4">'+esc(d.msg||"")+'</div>';
+  h+='<div style="display:flex;gap:10px;margin-top:18px"><button class="ghost" data-confirmno="1" style="flex:1;padding:12px">Cancelar</button><button class="primary" data-confirmyes="1" style="flex:1">Confirmar</button></div>';
+  h+='</div></div></div>';
+  return h;
+}
+function promptOverlay(){
+  var d=S.promptDlg||{};
+  var h='<div class="sheet" style="z-index:70"><div class="sheetbox" style="border-radius:16px;margin:0 18px calc(18px + env(safe-area-inset-bottom));max-height:none">';
+  h+='<div style="padding:22px 20px">';
+  h+='<div style="font-family:var(--serif);font-size:17px;margin-bottom:12px">'+esc(d.title||"")+'</div>';
+  h+='<input class="field" id="promptInput" value="'+esc(d.value||"")+'" placeholder="'+esc(d.placeholder||"")+'">';
+  h+='<div style="display:flex;gap:10px;margin-top:14px"><button class="ghost" data-promptno="1" style="flex:1;padding:12px">Cancelar</button><button class="primary" data-promptyes="1" style="flex:1">OK</button></div>';
+  h+='</div></div></div>';
+  return h;
+}
 function pickerOverlay(){
   var pk=S.picker||{};
   var h='<div class="overlay" style="z-index:50"><div style="display:flex;align-items:center;justify-content:space-between;padding:calc(22px + env(safe-area-inset-top)) 20px 8px"><span class="eyebrow">Escolher local na adega</span><button class="xbtn" data-pickclose="1">✕</button></div><div class="scroll" style="padding:0 16px 24px">';
@@ -656,7 +680,11 @@ function wire(){
   document.querySelectorAll("[data-rmcol]").forEach(function(b){b.onclick=function(){S.builder.columns.splice(+b.getAttribute("data-rmcol"),1);render();};});
   document.querySelectorAll("[data-addcol]").forEach(function(b){b.onclick=function(){S.builder.columns.push({width:1,depth:1});render();};});
   document.querySelectorAll("[data-addmodule]").forEach(function(b){b.onclick=function(){doAddModule();};});
-  document.querySelectorAll("[data-delmod]").forEach(function(b){b.onclick=function(){if(confirm("Excluir este módulo? Vinhos posicionados nele ficam sem local."))doDeleteModule(b.getAttribute("data-delmod"));};});
+  document.querySelectorAll("[data-delmod]").forEach(function(b){b.onclick=function(){var id=b.getAttribute("data-delmod");S.confirmDlg={msg:"Excluir este módulo? Vinhos posicionados nele ficam sem local.",action:function(){doDeleteModule(id);}};render();};});
+  document.querySelectorAll("[data-confirmyes]").forEach(function(b){b.onclick=function(){var d=S.confirmDlg;S.confirmDlg=null;render();if(d&&d.action)d.action();};});
+  document.querySelectorAll("[data-confirmno]").forEach(function(b){b.onclick=function(){S.confirmDlg=null;render();};});
+  document.querySelectorAll("[data-promptyes]").forEach(function(b){b.onclick=function(){var v=(document.getElementById("promptInput")||{}).value||"";var d=S.promptDlg;S.promptDlg=null;render();if(d&&d.action)d.action(v);};});
+  document.querySelectorAll("[data-promptno]").forEach(function(b){b.onclick=function(){S.promptDlg=null;render();};});
   wireDrag();
 
   var iu=document.getElementById("i_url"); if(iu)iu.oninput=function(){S.importUrl=iu.value;};
@@ -669,7 +697,7 @@ function wire(){
   document.querySelectorAll("[data-sheetclose]").forEach(function(b){b.onclick=function(){S.sheet=null;S.draft=null;S.picker=null;render();};});
   document.querySelectorAll("[data-add]").forEach(function(b){b.onclick=function(){S.draft={tipo:"Tinto",vinho:"",regiao:"",safra:"",uvas:"",valor:"",janela:"",module_id:null,row:null,col:null,depth:null};S.sheet=true;render();};});
   document.querySelectorAll("[data-editdetail]").forEach(function(b){b.onclick=function(){var id=b.getAttribute("data-editdetail");var w=S.wines.filter(function(x){return x.id===id;})[0];if(!w)return;S.draft={id:w.id,tipo:w.tipo,vinho:w.vinho,regiao:w.regiao,safra:w.safra,uvas:w.uvas,valor:w.valor,janela:w.janela,module_id:w.module_id,row:w.row,col:w.col,depth:w.depth};S.sheet=true;render();};});
-  document.querySelectorAll("[data-deldetail]").forEach(function(b){b.onclick=function(){var id=b.getAttribute("data-deldetail");var w=S.wines.filter(function(x){return x.id===id;})[0];if(!w)return;if(confirm('Excluir "'+w.vinho+'" da adega?'))doDeleteWine(id);};});
+  document.querySelectorAll("[data-deldetail]").forEach(function(b){b.onclick=function(){var id=b.getAttribute("data-deldetail");var w=S.wines.filter(function(x){return x.id===id;})[0];if(!w)return;S.confirmDlg={msg:'Excluir "'+w.vinho+'" da adega?',action:function(){doDeleteWine(id);}};render();};});
   document.querySelectorAll("[data-fopen]").forEach(function(b){b.onclick=function(){S.fOpen=!S.fOpen;render();};});
   document.querySelectorAll("[data-clear]").forEach(function(b){b.onclick=function(){S.f=defFilters();render();};});
   document.querySelectorAll("select[data-f]").forEach(function(sel){sel.onchange=function(){var k=sel.getAttribute("data-f"),v=sel.value;S.f[k]=v;render();};});
@@ -759,30 +787,38 @@ async function doAuth(){
 
 /* ---------------- ações (builder) ---------------- */
 async function doCreateCellar(mode){
+  S.builderErr="";
   var name=((document.getElementById("b_cellarname")||{}).value||"").trim()||"Minha adega";
   var r=await sb.from("cellars").insert({name:name}).select().single();
-  if(r.error){ alert(r.error.message); return; }
+  if(r.error){ S.builderErr=r.error.message; render(); return; }
   S.cellar=r.data;
   var wallName = mode==="refrigerador"?"Refrigerador":(mode==="ambiente"?"Parede 1":"Minha parede");
   var rw=await sb.from("walls").insert({cellar_id:S.cellar.id,name:wallName,position:0}).select().single();
-  if(rw.error){ alert(rw.error.message); return; }
+  if(rw.error){ S.builderErr=rw.error.message; render(); return; }
   S.walls=[rw.data]; S.builderWallId=rw.data.id; S.modules=[]; S.modulesById={};
   S.builder=freshBuilderDraft();
   if(mode==="refrigerador"){ S.builder.name="Refrigerador"; S.builder.shape="rect"; }
   render();
 }
-async function doAddWall(){
-  var name=prompt("Nome da parede:");
-  if(!name||!name.trim()) return;
-  var r=await sb.from("walls").insert({cellar_id:S.cellar.id,name:name.trim(),position:S.walls.length}).select().single();
-  if(r.error){ alert(r.error.message); return; }
+function doAddWall(){
+  S.promptDlg={title:"Nome da parede", placeholder:"Parede Norte", value:"", action:function(v){
+    if(!v||!v.trim()) return;
+    doAddWallConfirmed(v.trim());
+  }};
+  render();
+}
+async function doAddWallConfirmed(name){
+  S.builderErr="";
+  var r=await sb.from("walls").insert({cellar_id:S.cellar.id,name:name,position:S.walls.length}).select().single();
+  if(r.error){ S.builderErr=r.error.message; render(); return; }
   await loadWalls();
   S.builderWallId=r.data.id;
   render();
 }
 async function doAddModule(){
   var bd=S.builder;
-  if(!bd.name.trim()){ alert("Dê um nome pro módulo."); return; }
+  S.builderErr="";
+  if(!bd.name.trim()){ S.builderErr="Dê um nome pro módulo."; render(); return; }
   var rows = bd.shape==="rect" ? bd.rows : 1;
   var fw,fh;
   if(bd.shape==="rect"){ fw=Math.max(1,bd.columns.length*0.4); fh=Math.max(1,bd.rows*0.4); }
@@ -791,7 +827,7 @@ async function doAddModule(){
   var fx=0, fy=0;
   if(existing.length) fx=Math.max.apply(null,existing.map(function(m){return m.floor_x+m.floor_w;}))+0.2;
   var r=await sb.from("modules").insert({wall_id:S.builderWallId,name:bd.name.trim(),shape:bd.shape,rows:rows,floor_x:fx,floor_y:fy,floor_w:fw,floor_h:fh}).select().single();
-  if(r.error){ alert(r.error.message); return; }
+  if(r.error){ S.builderErr=r.error.message; render(); return; }
   var cols=[];
   if(bd.shape==="rect"){
     cols=bd.columns.map(function(c,i){return {module_id:r.data.id,col_index:i,width:c.width,depth:c.depth};});
@@ -799,7 +835,7 @@ async function doAddModule(){
     for(var i=0;i<bd.poolCount;i++) cols.push({module_id:r.data.id,col_index:i,width:1,depth:bd.poolDepth});
   }
   var rc=await sb.from("module_columns").insert(cols);
-  if(rc.error){ alert(rc.error.message); return; }
+  if(rc.error){ S.builderErr=rc.error.message; render(); return; }
   S.builder=freshBuilderDraft();
   await loadModules();
   render();
@@ -829,7 +865,7 @@ async function doImportConfirm(){
   if(!S.importPreview||!S.importPreview.length) return;
   var payload=S.importPreview.map(function(r){return Object.assign({cellar_id:S.cellar.id},r);});
   var r=await sb.from("wines").insert(payload);
-  if(r.error){ alert(r.error.message); return; }
+  if(r.error){ S.importErr=r.error.message; render(); return; }
   S.importPreview=null; S.importText=""; S.importUrl="";
   await loadWines();
   S.view="main"; render();
