@@ -148,6 +148,14 @@ var TIPOS=["Tinto","Branco","Espumante","Fortificado","Rosé"];
 var DEPTH_LABELS=["Frente","Meio","Fundo"];
 function depthLabel(n,total){ if(total<=3) return DEPTH_LABELS[n-1]||("P"+n); return "P"+n; }
 function poolDepthOf(m){ return (m.columns&&m.columns.length)?Number(m.columns[0].depth):1; }
+/* garante um token válido antes de gravar — em celular, o app pode ficar em segundo plano (tela bloqueou, trocou de app)
+   tempo suficiente pro login expirar sem renovar sozinho; isso força a checagem/renovação antes da escrita */
+async function ensureFreshSession(){ try{ await sb.auth.getSession(); }catch(e){} }
+function friendlyError(msg){
+  var s=String(msg||"");
+  if(s.indexOf("row-level security")>=0 || s.indexOf("JWT")>=0) return "Sua sessão expirou (o app ficou em segundo plano por um tempo). Saia (Sair) e entre de novo, depois repita a ação.";
+  return s;
+}
 
 /* ---------------- estado ---------------- */
 var S={
@@ -827,13 +835,14 @@ async function doAuth(){
 /* ---------------- ações (builder) ---------------- */
 async function doCreateCellar(mode){
   S.builderErr="";
+  await ensureFreshSession();
   var name=((document.getElementById("b_cellarname")||{}).value||"").trim()||"Minha adega";
   var r=await sb.from("cellars").insert({name:name}).select().single();
-  if(r.error){ S.builderErr=r.error.message; render(); return; }
+  if(r.error){ S.builderErr=friendlyError(r.error.message); render(); return; }
   S.cellar=r.data;
   var wallName = mode==="refrigerador"?"Refrigerador":(mode==="ambiente"?"Parede 1":"Minha parede");
   var rw=await sb.from("walls").insert({cellar_id:S.cellar.id,name:wallName,position:0}).select().single();
-  if(rw.error){ S.builderErr=rw.error.message; render(); return; }
+  if(rw.error){ S.builderErr=friendlyError(rw.error.message); render(); return; }
   S.walls=[rw.data]; S.builderWallId=rw.data.id; S.modules=[]; S.modulesById={};
   S.builder=freshBuilderDraft();
   if(mode==="refrigerador"){ S.builder.name="Refrigerador"; S.builder.shape="rect"; }
@@ -848,8 +857,9 @@ function doAddWall(){
 }
 async function doAddWallConfirmed(name){
   S.builderErr="";
+  await ensureFreshSession();
   var r=await sb.from("walls").insert({cellar_id:S.cellar.id,name:name,position:S.walls.length}).select().single();
-  if(r.error){ S.builderErr=r.error.message; render(); return; }
+  if(r.error){ S.builderErr=friendlyError(r.error.message); render(); return; }
   await loadWalls();
   S.builderWallId=r.data.id;
   render();
@@ -858,6 +868,7 @@ async function doAddModule(){
   var bd=S.builder;
   S.builderErr="";
   if(!bd.name.trim()){ S.builderErr="Dê um nome pro módulo."; render(); return; }
+  await ensureFreshSession();
   var rows = bd.shape==="rect" ? bd.rows : 1;
   var fw,fh;
   if(bd.shape==="rect"){ fw=Math.max(1,bd.columns.length*0.4); fh=Math.max(1,bd.rows*0.4); }
@@ -866,7 +877,7 @@ async function doAddModule(){
   var fx=0, fy=0;
   if(existing.length) fx=Math.max.apply(null,existing.map(function(m){return m.floor_x+m.floor_w;}))+0.2;
   var r=await sb.from("modules").insert({wall_id:S.builderWallId,name:bd.name.trim(),shape:bd.shape,rows:rows,floor_x:fx,floor_y:fy,floor_w:fw,floor_h:fh}).select().single();
-  if(r.error){ S.builderErr=r.error.message; render(); return; }
+  if(r.error){ S.builderErr=friendlyError(r.error.message); render(); return; }
   var cols=[];
   if(bd.shape==="rect"){
     cols=bd.columns.map(function(c,i){return {module_id:r.data.id,col_index:i,width:c.width,depth:c.depth};});
@@ -874,12 +885,13 @@ async function doAddModule(){
     for(var i=0;i<bd.poolCount;i++) cols.push({module_id:r.data.id,col_index:i,width:1,depth:bd.poolDepth});
   }
   var rc=await sb.from("module_columns").insert(cols);
-  if(rc.error){ S.builderErr=rc.error.message; render(); return; }
+  if(rc.error){ S.builderErr=friendlyError(rc.error.message); render(); return; }
   S.builder=freshBuilderDraft();
   await loadModules();
   render();
 }
 async function doDeleteModule(id){
+  await ensureFreshSession();
   await sb.from("modules").delete().eq("id",id);
   await loadModules(); await loadWines();
   render();
@@ -908,9 +920,10 @@ async function doImportParse(){
 async function doImportConfirm(){
   var preview=buildImportPreview();
   if(!preview.length) return;
+  await ensureFreshSession();
   var payload=preview.map(function(r){return Object.assign({cellar_id:S.cellar.id},r);});
   var r=await sb.from("wines").insert(payload);
-  if(r.error){ S.importErr=r.error.message; render(); return; }
+  if(r.error){ S.importErr=friendlyError(r.error.message); render(); return; }
   S.importRawRows=null; S.importHeaderIdx=-1; S.importMap={tipo:-1,vinho:-1,regiao:-1,safra:-1,uvas:-1,valor:-1,janela:-1};
   S.importText=""; S.importUrl="";
   await loadWines();
@@ -922,18 +935,20 @@ async function doSaveWine(){
   var f=S.draft;
   var pe=document.getElementById("poserr");
   if(!f.vinho||!f.vinho.trim()){ if(pe)pe.textContent="Informe o nome do vinho."; return; }
+  await ensureFreshSession();
   var payload={cellar_id:S.cellar.id,module_id:f.module_id||null,row:f.row||null,col:f.col||null,depth:f.module_id?(f.depth||1):null,
     tipo:f.tipo||"Tinto",vinho:f.vinho.trim(),regiao:(f.regiao||"").trim(),safra:f.safra||"",uvas:(f.uvas||"").trim(),valor:toNum(f.valor),janela:(f.janela||"").trim()};
   var r;
   if(f.id) r=await sb.from("wines").update(payload).eq("id",f.id);
   else r=await sb.from("wines").insert(payload);
-  if(r.error){ if(pe)pe.textContent = r.error.code==="23505" ? "Esse espaço já está ocupado." : r.error.message; return; }
+  if(r.error){ if(pe)pe.textContent = r.error.code==="23505" ? "Esse espaço já está ocupado." : friendlyError(r.error.message); return; }
   S.sheet=null; S.draft=null;
   await loadWines();
   if(S.locate) S.locate=S.wines.filter(function(w){return w.id===S.locate.id;})[0]||null;
   render();
 }
 async function doDeleteWine(id){
+  await ensureFreshSession();
   await sb.from("wines").delete().eq("id",id);
   S.locate=null;
   await loadWines();
