@@ -111,20 +111,35 @@ function parseCSV(text){
   if(cur.length||row.length){row.push(cur);rows.push(row);}
   return rows;
 }
-function parseWineCSV(text){
-  var rows=parseCSV(text);
-  var h=-1;
-  for(var i=0;i<rows.length;i++){ if(rows[i].some(function(c){return String(c).trim().toUpperCase().indexOf("VINHO")===0;})){h=i;break;} }
-  if(h<0) return [];
-  var head=rows[h].map(function(c){return String(c).trim().toUpperCase();});
+/* importação: linha de cabeçalho + mapeamento de colunas escolhido pelo usuário (não adivinha por posição) */
+function guessHeaderRow(rows){
+  for(var i=0;i<Math.min(rows.length,10);i++){
+    var nonEmpty=rows[i].filter(function(c){return String(c||"").trim();}).length;
+    if(nonEmpty>=2) return i;
+  }
+  return 0;
+}
+function guessColumnMap(headerCells){
+  var head=(headerCells||[]).map(function(c){return String(c||"").trim().toUpperCase();});
   function idx(name){ for(var j=0;j<head.length;j++){ if(head[j].indexOf(name)===0) return j; } return -1; }
-  var iT=idx("TIPO"),iV=idx("VINHO"),iR=idx("REGI"),iS=idx("SAFRA"),iU=idx("UVAS"),iVal=idx("VALOR"),iJ=idx("JANELA");
-  var out=[];
+  return {tipo:idx("TIPO"),vinho:idx("VINHO"),regiao:idx("REGI"),safra:idx("SAFRA"),uvas:idx("UVAS"),valor:idx("VALOR"),janela:idx("JANELA")};
+}
+function buildImportPreview(){
+  if(!S.importRawRows) return [];
+  var rows=S.importRawRows, h=S.importHeaderIdx, map=S.importMap, out=[];
   for(var r=h+1;r<rows.length;r++){
     var row=rows[r]; if(!row) continue;
-    var vinho=(row[iV]||"").trim();
+    var vinho=map.vinho>=0?(row[map.vinho]||"").trim():"";
     if(!vinho) continue;
-    out.push({tipo:(row[iT]||"").trim()||"Tinto",vinho:vinho,regiao:(row[iR]||"").trim(),safra:(row[iS]||"").trim(),uvas:(row[iU]||"").trim(),valor:toNum(row[iVal]),janela:(row[iJ]||"").trim()});
+    out.push({
+      tipo:(map.tipo>=0?(row[map.tipo]||"").trim():"")||"Tinto",
+      vinho:vinho,
+      regiao:map.regiao>=0?(row[map.regiao]||"").trim():"",
+      safra:map.safra>=0?(row[map.safra]||"").trim():"",
+      uvas:map.uvas>=0?(row[map.uvas]||"").trim():"",
+      valor:map.valor>=0?toNum(row[map.valor]):null,
+      janela:map.janela>=0?(row[map.janela]||"").trim():""
+    });
   }
   return out;
 }
@@ -144,7 +159,8 @@ var S={
   authMode:"login", authEmail:"", authPass:"", authErr:"", authMsg:"", authBusy:false,
   builder:freshBuilderDraft(), builderErr:"",
   wallTransform:null, confirmDlg:null, promptDlg:null,
-  importUrl:"", importText:"", importPreview:null, importErr:"", importBusy:false
+  importUrl:"", importText:"", importErr:"", importBusy:false,
+  importRawRows:null, importHeaderIdx:-1, importMap:{tipo:-1,vinho:-1,regiao:-1,safra:-1,uvas:-1,valor:-1,janela:-1}
 };
 function defFilters(){ return {tipo:"Todos",ordenar:"adega",vmin:0,vmax:1e9}; }
 function freshBuilderDraft(){ return {name:"",shape:"rect",rows:6,columns:[{width:1,depth:1}],poolCount:8,poolDepth:1}; }
@@ -496,18 +512,39 @@ function importScreen(){
   var h='<div class="safe-top" style="padding:calc(24px + env(safe-area-inset-top)) 18px 16px">';
   h+='<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="eyebrow" style="color:var(--gold)">Importar</div><h1 style="font-size:28px;margin-top:2px">Trazer vinhos</h1></div><button class="ghost" data-nav="main">‹ App</button></div>';
   h+='<div class="rule"></div>';
-  h+='<div class="muted" style="font-size:13px;margin-bottom:10px">Cole o link de um CSV publicado (Google Sheets → Publicar na Web → CSV) ou cole o texto CSV direto. Colunas esperadas: TIPO, VINHO, REGIÃO, SAFRA, UVAS, VALOR, JANELA. Os vinhos entram sem posição — você define o local de cada um depois.</div>';
+  h+='<div class="muted" style="font-size:13px;margin-bottom:10px">Cole o link de um CSV publicado (Google Sheets → Publicar na Web → CSV) ou cole o texto CSV direto. Não precisa estar na ordem certa nem ter só essas colunas — no próximo passo você escolhe qual coluna da sua planilha é cada campo. Os vinhos entram sem posição — você define o local de cada um depois.</div>';
   h+='<label class="lab">URL do CSV (opcional)</label><input class="field" id="i_url" value="'+esc(S.importUrl)+'" placeholder="https://docs.google.com/.../pub?output=csv">';
-  h+='<label class="lab">Ou cole o CSV aqui</label><textarea class="field" id="i_text" rows="6" placeholder="TIPO,VINHO,REGIAO,SAFRA,UVAS,VALOR,JANELA">'+esc(S.importText)+'</textarea>';
-  h+='<button class="ghost" data-importparse="1" style="width:100%;margin-top:10px;padding:12px">'+(S.importBusy?"Lendo…":"Pré-visualizar")+'</button>';
+  h+='<label class="lab">Ou cole o CSV aqui</label><textarea class="field" id="i_text" rows="6" placeholder="Cole aqui o conteúdo da sua planilha exportada como CSV">'+esc(S.importText)+'</textarea>';
+  h+='<button class="ghost" data-importparse="1" style="width:100%;margin-top:10px;padding:12px">'+(S.importBusy?"Lendo…":"Ler colunas")+'</button>';
   if(S.importErr) h+='<div class="errtext">'+esc(S.importErr)+'</div>';
-  if(S.importPreview){
-    h+='<div class="oktext">Encontrei '+S.importPreview.length+' vinho(s).</div>';
-    h+='<div class="cardgrid">';
-    S.importPreview.slice(0,5).forEach(function(w){ h+='<div class="card" style="cursor:default"><div class="vname" style="font-size:16px">'+esc(w.vinho)+'</div><div class="muted" style="font-size:12.5px">'+esc(w.regiao)+' · '+esc(w.safra)+'</div></div>'; });
-    h+='</div>';
-    if(S.importPreview.length>5) h+='<div class="muted" style="font-size:12px;margin-top:6px">e mais '+(S.importPreview.length-5)+'…</div>';
-    h+='<button class="primary" data-importconfirm="1" style="margin-top:14px">Importar '+S.importPreview.length+' vinho(s)</button>';
+  if(S.importRawRows){
+    h+='<div class="divider" style="margin-top:16px"></div>';
+    h+='<label class="lab">Qual linha é o cabeçalho?</label><div class="sel"><select data-headerrow="1">';
+    S.importRawRows.slice(0,10).forEach(function(row,ri){
+      var preview=row.slice(0,4).map(function(c){return String(c||"").trim();}).filter(Boolean).join(" · ")||"(vazia)";
+      h+='<option value="'+ri+'"'+(ri===S.importHeaderIdx?" selected":"")+'>Linha '+(ri+1)+': '+esc(preview)+'</option>';
+    });
+    h+='</select></div>';
+    var headRow=S.importRawRows[S.importHeaderIdx]||[];
+    h+='<div class="eyebrow" style="margin-top:16px">Qual coluna é cada campo?</div>';
+    [["vinho","Vinho (obrigatório)"],["tipo","Tipo"],["regiao","Região"],["safra","Safra"],["uvas","Uvas"],["valor","Valor"],["janela","Janela de consumo"]].forEach(function(f){
+      h+='<label class="lab">'+f[1]+'</label><div class="sel"><select data-mapfield="'+f[0]+'">';
+      h+='<option value="-1"'+(S.importMap[f[0]]===-1?" selected":"")+'>— Não usar —</option>';
+      headRow.forEach(function(colName,ci){
+        var label=String(colName||"").trim()||("Coluna "+(ci+1));
+        h+='<option value="'+ci+'"'+(S.importMap[f[0]]===ci?" selected":"")+'>'+esc(label)+'</option>';
+      });
+      h+='</select></div>';
+    });
+    var preview=buildImportPreview();
+    h+='<div class="'+(preview.length?"oktext":"errtext")+'" style="margin-top:12px">'+(preview.length?(preview.length+" vinho(s) encontrados com esse mapeamento."):"Nenhum vinho encontrado — confira a coluna \"Vinho\".")+'</div>';
+    if(preview.length){
+      h+='<div class="cardgrid">';
+      preview.slice(0,5).forEach(function(w){ h+='<div class="card" style="cursor:default"><div class="vname" style="font-size:16px">'+esc(w.vinho)+'</div><div class="muted" style="font-size:12.5px">'+esc(w.regiao)+' · '+esc(w.safra)+(w.valor!=null?' · '+brl(w.valor):"")+'</div></div>'; });
+      h+='</div>';
+      if(preview.length>5) h+='<div class="muted" style="font-size:12px;margin-top:6px">e mais '+(preview.length-5)+'…</div>';
+      h+='<button class="primary" data-importconfirm="1" style="margin-top:14px">Importar '+preview.length+' vinho(s)</button>';
+    }
   }
   return h+'</div>';
 }
@@ -691,6 +728,8 @@ function wire(){
   var it=document.getElementById("i_text"); if(it)it.oninput=function(){S.importText=it.value;};
   document.querySelectorAll("[data-importparse]").forEach(function(b){b.onclick=function(){doImportParse();};});
   document.querySelectorAll("[data-importconfirm]").forEach(function(b){b.onclick=function(){doImportConfirm();};});
+  var hr=document.querySelector("[data-headerrow]"); if(hr)hr.onchange=function(){S.importHeaderIdx=+hr.value;S.importMap=guessColumnMap(S.importRawRows[S.importHeaderIdx]);render();};
+  document.querySelectorAll("[data-mapfield]").forEach(function(sel){sel.onchange=function(){S.importMap[sel.getAttribute("data-mapfield")]=+sel.value;render();};});
 
   document.querySelectorAll("[data-loc]").forEach(function(b){b.onclick=function(){var id=b.getAttribute("data-loc");S.locate=S.wines.filter(function(w){return w.id===id;})[0];render();};});
   document.querySelectorAll("[data-close]").forEach(function(b){b.onclick=function(){S.locate=null;render();};});
@@ -848,25 +887,32 @@ async function doDeleteModule(id){
 
 /* ---------------- ações (import) ---------------- */
 async function doImportParse(){
-  S.importErr=""; S.importPreview=null; S.importBusy=true; render();
+  S.importErr=""; S.importRawRows=null; S.importBusy=true; render();
   try{
     var text=S.importText;
     if(S.importUrl.trim()){
       var resp=await fetch(S.importUrl.trim()+((S.importUrl.indexOf("?")>=0?"&":"?")+"t="+Date.now()));
       text=await resp.text();
     }
-    var rows=parseWineCSV(text||"");
-    if(!rows.length){ S.importErr="Não encontrei vinhos — confira se tem uma coluna VINHO no CSV."; }
-    else S.importPreview=rows;
+    var rows=parseCSV(text||"");
+    if(!rows.length || !rows.some(function(row){return row.some(function(c){return String(c||"").trim();});})){
+      S.importErr="Não consegui ler nenhuma linha — confira se colou o CSV certo.";
+    } else {
+      S.importRawRows=rows;
+      S.importHeaderIdx=guessHeaderRow(rows);
+      S.importMap=guessColumnMap(rows[S.importHeaderIdx]);
+    }
   } catch(e){ S.importErr="Falha ao ler: "+String(e); }
   S.importBusy=false; render();
 }
 async function doImportConfirm(){
-  if(!S.importPreview||!S.importPreview.length) return;
-  var payload=S.importPreview.map(function(r){return Object.assign({cellar_id:S.cellar.id},r);});
+  var preview=buildImportPreview();
+  if(!preview.length) return;
+  var payload=preview.map(function(r){return Object.assign({cellar_id:S.cellar.id},r);});
   var r=await sb.from("wines").insert(payload);
   if(r.error){ S.importErr=r.error.message; render(); return; }
-  S.importPreview=null; S.importText=""; S.importUrl="";
+  S.importRawRows=null; S.importHeaderIdx=-1; S.importMap={tipo:-1,vinho:-1,regiao:-1,safra:-1,uvas:-1,valor:-1,janela:-1};
+  S.importText=""; S.importUrl="";
   await loadWines();
   S.view="main"; render();
 }
